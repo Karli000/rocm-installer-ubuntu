@@ -20,7 +20,7 @@ Dieses Bash-Skript installiert das AMD ROCm Framework mit zusätzlichen SDKs und
 ## 📦 Installation
 
 ```bash
-wget https://raw.githubusercontent.com/<DEIN_USER>/rocm-installer-ubuntu/main/install.sh -O install.sh
+wget https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/main/install.sh -O install.sh
 chmod +x install.sh
 ./install.sh
 ```
