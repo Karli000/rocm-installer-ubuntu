@@ -19,45 +19,21 @@ function try {
   fi
 }
 
-echo "🔍 Prüfe GPU und ermittele HSA_OVERRIDE_GFX_VERSION..."
-
-if ! command -v rocminfo >/dev/null 2>&1; then
-  echo "⚠️ rocminfo nicht gefunden. Bitte vorher ROCm-Grundlagen installieren."
-  exit 1
-fi
-
-GFX=$(rocminfo | grep -o 'gfx[0-9]\+' | head -n1)
-
-case "$GFX" in
-  gfx906)  HSA_OVERRIDE_GFX_VERSION="9.0.6" ;;   # Vega
-  gfx1010) HSA_OVERRIDE_GFX_VERSION="10.1.0" ;;  # RDNA1
-  gfx1030) HSA_OVERRIDE_GFX_VERSION="10.3.0" ;;  # RDNA2
-  gfx1100) HSA_OVERRIDE_GFX_VERSION="11.0.0" ;;  # RDNA3
-  *)
-    echo "⚠️ Keine unterstützte GPU erkannt (GFX: $GFX). Installation wird abgebrochen."
-    exit 1
-    ;;
-esac
-
-echo "✅ GPU erkannt: $GFX, setze HSA_OVERRIDE_GFX_VERSION=$HSA_OVERRIDE_GFX_VERSION"
-
 echo "🚀 Ubuntu-Version ermitteln und passende ROCm-Version auswählen"
 
 ROCM_VERSION="6.4.2"
-ROCM_VERSION_SHORT="6.4"
+ROCM_VERSION_SHORT="6.4."
 
+# Ubuntu Version auslesen und DISTRO bestimmen
 if [[ -f /etc/os-release ]]; then
   . /etc/os-release
   case "$VERSION_CODENAME" in
     jammy) DISTRO="jammy" ;;
     noble) DISTRO="noble" ;;
-    *)
-      echo "⚠️ Unsupported Ubuntu Version: $VERSION_CODENAME. Nur jammy oder noble unterstützt."
-      exit 1
-      ;;
+    *) echo "❌ Nicht unterstützte Ubuntu-Version: $VERSION_CODENAME"; exit 1 ;;
   esac
 else
-  echo "⚠️ /etc/os-release nicht gefunden, kann Ubuntu-Version nicht bestimmen. Abbruch."
+  echo "❌ /etc/os-release nicht gefunden – kann Ubuntu-Version nicht bestimmen."
   exit 1
 fi
 
@@ -99,14 +75,44 @@ try "ROCm PATH und Umgebungsvariablen systemweit und benutzerspezifisch setzen" 
   echo 'export ROCM_PATH=/opt/rocm-${ROCM_VERSION}' | sudo tee /etc/profile.d/rocm.sh >/dev/null && \
   echo 'export PATH=\$ROCM_PATH/bin:\$PATH' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null && \
   echo 'export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null && \
-  echo 'export HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION}' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null && \
   echo '' >> ~/.bashrc && \
   echo '# ROCm Umgebung' >> ~/.bashrc && \
   echo 'export ROCM_PATH=/opt/rocm-${ROCM_VERSION}' >> ~/.bashrc && \
   echo 'export PATH=\$ROCM_PATH/bin:\$PATH' >> ~/.bashrc && \
   echo 'export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH' >> ~/.bashrc && \
-  echo 'export HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION}' >> ~/.bashrc && \
   source ~/.bashrc"
+
+# 🧠 GPU erkennen mit rocminfo → HSA-Version setzen
+echo "🔍 GPU erkennen mit rocminfo (nach ROCm-Installation)..."
+
+if ! command -v rocminfo >/dev/null 2>&1; then
+  echo "❌ rocminfo nicht gefunden – ROCm wurde nicht korrekt installiert."
+  exit 1
+fi
+
+GFX=$(rocminfo | grep -o 'gfx[0-9]\+' | head -n1)
+
+declare -A GFX_HSA_MAP=(
+  [gfx803]="8.0.0"    # Polaris (eingeschränkt)
+  [gfx906]="9.0.6"    # Vega
+  [gfx1010]="10.1.0"  # RDNA1
+  [gfx1030]="10.3.0"  # RDNA2
+  [gfx1100]="11.0.0"  # RDNA3
+)
+
+HSA_OVERRIDE_GFX_VERSION="${GFX_HSA_MAP[$GFX]}"
+
+if [[ -z "$HSA_OVERRIDE_GFX_VERSION" ]]; then
+  echo "❌ Unterstützte GPU konnte nicht erkannt werden (GFX: $GFX)."
+  exit 1
+fi
+
+echo "✅ GPU erkannt: $GFX → HSA_OVERRIDE_GFX_VERSION=$HSA_OVERRIDE_GFX_VERSION"
+
+# In Umgebungsvariablen setzen
+sudo sed -i '/^export HSA_OVERRIDE_GFX_VERSION/d' /etc/profile.d/rocm.sh
+echo "export HSA_OVERRIDE_GFX_VERSION=$HSA_OVERRIDE_GFX_VERSION" | sudo tee -a /etc/profile.d/rocm.sh
+echo "export HSA_OVERRIDE_GFX_VERSION=$HSA_OVERRIDE_GFX_VERSION" >> ~/.bashrc
 
 # Prüfen ob rocminfo ausführbar ist
 if [[ -x "/opt/rocm-${ROCM_VERSION}/bin/rocminfo" ]]; then
@@ -119,10 +125,12 @@ echo -e "\n🎉 Installationsergebnis:\n"
 echo -e "✅ Erfolgreiche Schritte:\n$SUCCESS_MSGS"
 if [[ -n "$ERROR_MSGS" ]]; then
   echo -e "❌ Fehlgeschlagene Schritte:\n$ERROR_MSGS"
-  echo "⏹️ Bitte manuell neu starten, um Änderungen zu aktivieren."
-  exit 1
 else
   echo -e "Keine Fehler aufgetreten.\n"
-  echo "♻️ Starte System jetzt automatisch neu, um Änderungen zu übernehmen..."
-  sudo reboot
 fi
+
+echo "ℹ️ Bitte nach dem Neustart erneut einloggen, damit Gruppen- und Umgebungsänderungen aktiv werden."
+
+echo "🔁 System wird jetzt automatisch neu gestartet..."
+sleep 5
+sudo reboot
