@@ -91,11 +91,12 @@ declare -A HSA_MAP=(
   [gfx900]="9.0.6"       # Vega 10 (SRD)
   [gfx906]="9.0.6"       # Vega 20 (SRD)
   [gfx908]="9.0.6"       # Vega 20 (SRD)
-  [gfx1010]="10.1.0"     # Navi 10 (RDNA1)
-  [gfx1030]="10.3.0"     # Navi 21 (RDNA2)
+  [gfx1010]="10.1.0"     # RDNA1
+  [gfx1030]="10.3.0"     # RDNA2
+  [gfx1031]="10.3.0"     # RDNA2
   [gfx1100]="11.0.0"     # RDNA3
-  [gfx1012]="10.1.0"     # Navi 14 (RDNA1)
-  [gfx1014]="10.1.0"     # Navi 12 (RDNA1)
+  [gfx1012]="10.1.0"     # RDNA1
+  [gfx1014]="10.1.0"     # RDNA1
 )
 
 HSA_OVERRIDE_GFX_VERSION="${HSA_MAP[$GFX]}"
