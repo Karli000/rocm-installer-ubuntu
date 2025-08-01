@@ -119,15 +119,10 @@ echo -e "\n🎉 Installationsergebnis:\n"
 echo -e "✅ Erfolgreiche Schritte:\n$SUCCESS_MSGS"
 if [[ -n "$ERROR_MSGS" ]]; then
   echo -e "❌ Fehlgeschlagene Schritte:\n$ERROR_MSGS"
+  echo "⏹️ Bitte manuell neu starten, um Änderungen zu aktivieren."
+  exit 1
 else
   echo -e "Keine Fehler aufgetreten.\n"
-fi
-
-echo "ℹ️ Bitte nach dem Neustart erneut einloggen, damit Gruppen- und Umgebungsänderungen aktiv werden."
-
-read -p "🔁 System jetzt neu starten? (j/N): " answer
-if [[ "$answer" =~ ^[Jj]$ ]]; then
+  echo "♻️ Starte System jetzt automatisch neu, um Änderungen zu übernehmen..."
   sudo reboot
-else
-  echo "⏹️ Neustart abgebrochen. Bitte manuell neu starten, um Änderungen zu aktivieren."
 fi
