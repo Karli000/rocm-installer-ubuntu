@@ -19,9 +19,21 @@ function try {
   fi
 }
 
+echo "🚀 ROCm Repository und GPG-Key einrichten"
+
+try "ROCm Paketquellen einrichten und Paketlisten aktualisieren" bash -c "
+  sudo mkdir -p /etc/apt/keyrings &&
+  wget -qO - https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null &&
+  echo \"deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.4.2 jammy main\" | sudo tee /etc/apt/sources.list.d/rocm.list &&
+  echo -e 'Package: *\nPin: release o=repo.radeon.com\nPin-Priority: 600' | sudo tee /etc/apt/preferences.d/rocm-pin-600 &&
+  sudo apt update
+"
+
+try "Systempakete aktualisieren" sudo apt upgrade -y && sudo apt dist-upgrade -y && sudo apt install update-manager-core -y
+
+
 echo "🚀 Starte ROCm Installation"
 
-try "Systempakete aktualisieren" sudo apt update && sudo apt upgrade -y && sudo apt dist-upgrade -y && sudo apt install update-manager-core -y
 try "Build-Tools installieren" sudo apt install -y build-essential python3-setuptools python3-wheel wget
 
 CURRENT_USER=$(logname)
