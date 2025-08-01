@@ -109,16 +109,33 @@ fi
 echo "✅ GPU erkannt: $GFX ($GPU_NAME), setze HSA_OVERRIDE_GFX_VERSION=$HSA_OVERRIDE_GFX_VERSION"
 
 
-try "ROCm PATH und Umgebungsvariablen systemweit und benutzerspezifisch setzen" bash -c "\
-  echo 'export ROCM_PATH=/opt/rocm-${ROCM_VERSION}' | sudo tee /etc/profile.d/rocm.sh >/dev/null && \
-  echo 'export PATH=\$ROCM_PATH/bin:\$PATH' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null && \
-  echo 'export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null && \
-  echo '' >> ~/.bashrc && \
-  echo '# ROCm Umgebung' >> ~/.bashrc && \
-  echo 'export ROCM_PATH=/opt/rocm-${ROCM_VERSION}' >> ~/.bashrc && \
-  echo 'export PATH=\$ROCM_PATH/bin:\$PATH' >> ~/.bashrc && \
-  echo 'export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH' >> ~/.bashrc && \
-  source ~/.bashrc"
+CURRENT_USER=$(logname)
+ROCM_PATH="/opt/rocm-${ROCM_VERSION}"
+
+echo "🔧 Setze systemweite und benutzerspezifische Umgebungsvariablen..."
+
+sudo tee /etc/profile.d/rocm.sh >/dev/null <<EOF
+export ROCM_PATH=${ROCM_PATH}
+export PATH=\$ROCM_PATH/bin:\$PATH
+export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH
+export HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION}
+EOF
+
+USER_HOME=$(eval echo "~$CURRENT_USER")
+BASHRC_FILE="${USER_HOME}/.bashrc"
+
+if ! grep -q "ROCM_PATH" "$BASHRC_FILE"; then
+  cat >> "$BASHRC_FILE" <<EOF
+
+# ROCm Umgebung
+export ROCM_PATH=${ROCM_PATH}
+export PATH=\$ROCM_PATH/bin:\$PATH
+export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH
+export HSA_OVERRIDE_GFX_VERSION=${HSA_OVERRIDE_GFX_VERSION}
+EOF
+fi
+
+echo "✅ Umgebungsvariablen wurden geschrieben. Bitte neu einloggen oder 'source ~/.bashrc' ausführen."
 
 
 # Prüfen ob rocminfo ausführbar ist
