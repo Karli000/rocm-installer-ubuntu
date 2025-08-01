@@ -50,7 +50,7 @@ INSTALLER_URL="https://repo.radeon.com/amdgpu-install/${ROCM_VERSION}/ubuntu/nob
 try "ROCm Installer herunterladen" wget -q "$INSTALLER_URL" -O amdgpu-install.deb
 try "ROCm Installer Paket installieren" sudo apt install -y --allow-downgrades ./amdgpu-install.deb
 
-try "ROCm + SDKs installieren" bash -c "yes | sudo amdgpu-install --usecase=graphics,rocm,lrt,hip,opencl,mllib,graphics,rocmdevtools,hiplibsdk,openclsdk,openmpsdk,mlsdk --no-dkms --accept-eula"
+try "ROCm + SDKs installieren" bash -c "yes | sudo amdgpu-install --usecase=graphics,rocm,lrt,hip,opencl,mllib,graphics,rocmdevtools,hiplibsdk,openclsdk,openmpsdk,mlsdk --dkms --accept-eula"
 
 try "ROCm PATH und Umgebungsvariablen systemweit und benutzerspezifisch setzen" bash -c "\
   echo 'export ROCM_PATH=${ROCM_PATH}' | sudo tee /etc/profile.d/rocm.sh >/dev/null && \
