@@ -26,15 +26,14 @@ ROCM_VERSION_SHORT="6.4."
 
 # Ubuntu Version auslesen und DISTRO bestimmen
 if [[ -f /etc/os-release ]]; then
-  . /etc/os-release
+  VERSION_CODENAME=$(grep VERSION_CODENAME /etc/os-release | cut -d= -f2 | tr -d '"')
   case "$VERSION_CODENAME" in
     jammy) DISTRO="jammy" ;;
     noble) DISTRO="noble" ;;
-    *) echo "❌ Nicht unterstützte Ubuntu-Version: $VERSION_CODENAME"; exit 1 ;;
+    *) echo "❌ Unsupported Ubuntu version: $VERSION_CODENAME"; exit 1 ;;
   esac
 else
-  echo "❌ /etc/os-release nicht gefunden – kann Ubuntu-Version nicht bestimmen."
-  exit 1
+  echo "❌ /etc/os-release nicht gefunden."; exit 1
 fi
 
 echo "Gefundene Ubuntu-Version: $VERSION_CODENAME"
