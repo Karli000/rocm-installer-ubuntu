@@ -29,7 +29,7 @@ try "ROCm Paketquellen einrichten und Paketlisten aktualisieren" bash -c "
   sudo apt update
 "
 
-try "Systempakete aktualisieren" sudo apt upgrade -y && sudo apt dist-upgrade -y && sudo apt install update-manager-core -y
+try "Systempakete aktualisieren" sudo apt upgrade -y && sudo apt upgrade -y && sudo apt dist-upgrade -y && sudo apt install update-manager-core -y
 
 
 echo "🚀 Starte ROCm Installation"
