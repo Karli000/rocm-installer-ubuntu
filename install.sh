@@ -70,6 +70,44 @@ try "ROCm Installer Paket installieren" sudo apt install -y --allow-downgrades .
 
 try "ROCm + SDKs installieren" bash -c "yes | sudo amdgpu-install --usecase=dkms,graphics,rocm,lrt,hip,opencl,mllib,rocmdevtools,hiplibsdk,openclsdk,openmpsdk,mlsdk --accept-eula"
 
+echo "🔍 GPU erkennen mit rocminfo (nach ROCm-Installation)..."
+
+if ! command -v rocminfo >/dev/null 2>&1; then
+  echo "❌ rocminfo nicht gefunden. Bitte Installation überprüfen."
+  exit 1
+fi
+
+GFX=$(rocminfo | grep -oP 'gfx[0-9]+' | head -n1)
+GPU_NAME=$(rocminfo | grep -A1 "Agent.*GPU" | grep "Marketing Name" | head -n1 | cut -d':' -f2 | xargs)
+
+declare -A HSA_MAP=(
+  [gfx700]="9.0.0"       # Polaris 10
+  [gfx701]="9.0.0"       # Polaris 11
+  [gfx702]="9.0.0"       # Polaris 12
+  [gfx703]="9.0.0"       # Vega 10 (FRD)
+  [gfx704]="9.0.6"       # Vega 12 (FRD)
+  [gfx705]="9.0.6"       # Vega 20 (FRD)
+  [gfx806]="10.1.0"      # Navi 10 (RDNA1)
+  [gfx900]="9.0.6"       # Vega 10 (SRD)
+  [gfx906]="9.0.6"       # Vega 20 (SRD)
+  [gfx908]="9.0.6"       # Vega 20 (SRD)
+  [gfx1010]="10.1.0"     # Navi 10 (RDNA1)
+  [gfx1030]="10.3.0"     # Navi 21 (RDNA2)
+  [gfx1100]="11.0.0"     # RDNA3
+  [gfx1012]="10.1.0"     # Navi 14 (RDNA1)
+  [gfx1014]="10.1.0"     # Navi 12 (RDNA1)
+)
+
+HSA_OVERRIDE_GFX_VERSION="${HSA_MAP[$GFX]}"
+
+if [[ -z "$HSA_OVERRIDE_GFX_VERSION" ]]; then
+  echo "❌ Keine unterstützte GPU erkannt (GFX: $GFX). Installation wird abgebrochen."
+  exit 1
+fi
+
+echo "✅ GPU erkannt: $GFX ($GPU_NAME), setze HSA_OVERRIDE_GFX_VERSION=$HSA_OVERRIDE_GFX_VERSION"
+
+
 try "ROCm PATH und Umgebungsvariablen systemweit und benutzerspezifisch setzen" bash -c "\
   echo 'export ROCM_PATH=/opt/rocm-${ROCM_VERSION}' | sudo tee /etc/profile.d/rocm.sh >/dev/null && \
   echo 'export PATH=\$ROCM_PATH/bin:\$PATH' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null && \
@@ -81,37 +119,6 @@ try "ROCm PATH und Umgebungsvariablen systemweit und benutzerspezifisch setzen" 
   echo 'export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH' >> ~/.bashrc && \
   source ~/.bashrc"
 
-# 🧠 GPU erkennen mit rocminfo → HSA-Version setzen
-echo "🔍 GPU erkennen mit rocminfo (nach ROCm-Installation)..."
-
-if ! command -v rocminfo >/dev/null 2>&1; then
-  echo "❌ rocminfo nicht gefunden – ROCm wurde nicht korrekt installiert."
-  exit 1
-fi
-
-GFX=$(rocminfo | grep -o 'gfx[0-9]\+' | head -n1)
-
-declare -A GFX_HSA_MAP=(
-  [gfx803]="8.0.0"    # Polaris (eingeschränkt)
-  [gfx906]="9.0.6"    # Vega
-  [gfx1010]="10.1.0"  # RDNA1
-  [gfx1030]="10.3.0"  # RDNA2
-  [gfx1100]="11.0.0"  # RDNA3
-)
-
-HSA_OVERRIDE_GFX_VERSION="${GFX_HSA_MAP[$GFX]}"
-
-if [[ -z "$HSA_OVERRIDE_GFX_VERSION" ]]; then
-  echo "❌ Unterstützte GPU konnte nicht erkannt werden (GFX: $GFX)."
-  exit 1
-fi
-
-echo "✅ GPU erkannt: $GFX → HSA_OVERRIDE_GFX_VERSION=$HSA_OVERRIDE_GFX_VERSION"
-
-# In Umgebungsvariablen setzen
-sudo sed -i '/^export HSA_OVERRIDE_GFX_VERSION/d' /etc/profile.d/rocm.sh
-echo "export HSA_OVERRIDE_GFX_VERSION=$HSA_OVERRIDE_GFX_VERSION" | sudo tee -a /etc/profile.d/rocm.sh
-echo "export HSA_OVERRIDE_GFX_VERSION=$HSA_OVERRIDE_GFX_VERSION" >> ~/.bashrc
 
 # Prüfen ob rocminfo ausführbar ist
 if [[ -x "/opt/rocm-${ROCM_VERSION}/bin/rocminfo" ]]; then
