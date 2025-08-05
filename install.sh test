@@ -74,14 +74,61 @@ try "ROCm Installer Paket installieren" sudo apt install -y --allow-downgrades .
 
 try "ROCm + SDKs installieren" bash -c "yes | sudo amdgpu-install --usecase=graphics,rocm,lrt,hip,opencl,mllib,rocmdevtools,hiplibsdk,openclsdk,openmpsdk,mlsdk --no-dkms --accept-eula"
 
-try "ROCm PATH und Umgebungsvariablen setzen" bash -c "\
+# 1. Umgebungsvariablen global und bashrc setzen
+try "ROCm PATH und Umgebungsvariablen global und in bashrc setzen" bash -c "\
   echo 'export ROCM_PATH=${ROCM_PATH}' | sudo tee /etc/profile.d/rocm.sh >/dev/null && \
   echo 'export PATH=\$ROCM_PATH/bin:\$PATH' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null && \
   echo 'export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null && \
-  echo 'export HSA_OVERRIDE_GFX_VERSION=10.3.0' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null
+  if ! grep -q 'ROCM_PATH' ~/.bashrc; then \
+    echo 'export ROCM_PATH=${ROCM_PATH}' >> ~/.bashrc; \
+    echo 'export PATH=\$ROCM_PATH/bin:\$PATH' >> ~/.bashrc; \
+    echo 'export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH' >> ~/.bashrc; \
+  fi \
 "
 
-# 🔧 Docker Hook installieren
+# 2. Variablen neu laden, damit rocminfo funktioniert
+echo "🔄 Lade Umgebungsvariablen neu..."
+source /etc/profile.d/rocm.sh
+source ~/.bashrc
+
+# 3. GFX-Erkennung mit Mapping für RDNA2 RX 6000 Serie
+declare -A gfx_map=(
+  ["1030"]="10.3.0"
+  ["1031"]="10.3.1"
+  ["1032"]="10.3.2"
+  ["1033"]="10.3.3"
+)
+
+echo "🔍 GFX-Version mit rocminfo auslesen..."
+gfx_code=$(rocminfo 2>/dev/null | grep 'gfx' | head -n1 | grep -oP 'gfx\K[0-9]{4}')
+if [[ -z "$gfx_code" ]]; then
+  echo "⚠️ Keine GFX-Version gefunden, HSA_OVERRIDE_GFX_VERSION wird nicht gesetzt."
+else
+  hsa_version="${gfx_map[$gfx_code]}"
+  if [[ -z "$hsa_version" ]]; then
+    echo "⚠️ GFX-Code $gfx_code nicht im Mapping gefunden, bitte manuell setzen."
+  else
+    echo "✅ GFX-Code $gfx_code erkannt, setze HSA_OVERRIDE_GFX_VERSION=$hsa_version"
+
+    # 4. HSA_OVERRIDE_GFX_VERSION global setzen (wenn noch nicht gesetzt)
+    if ! grep -q "HSA_OVERRIDE_GFX_VERSION" /etc/profile.d/rocm.sh; then
+      echo "export HSA_OVERRIDE_GFX_VERSION=$hsa_version" | sudo tee -a /etc/profile.d/rocm.sh >/dev/null
+    fi
+    # 5. HSA_OVERRIDE_GFX_VERSION in bashrc setzen (wenn noch nicht gesetzt)
+    if ! grep -q "HSA_OVERRIDE_GFX_VERSION" ~/.bashrc; then
+      echo "export HSA_OVERRIDE_GFX_VERSION=$hsa_version" >> ~/.bashrc
+    fi
+
+    # 6. Variablen nochmal neu laden, damit HSA_OVERRIDE_GFX_VERSION aktiv ist
+    echo "🔄 Lade HSA_OVERRIDE_GFX_VERSION neu..."
+    source /etc/profile.d/rocm.sh
+    source ~/.bashrc
+
+    echo "🎉 HSA_OVERRIDE_GFX_VERSION erfolgreich gesetzt."
+  fi
+fi
+
+# Docker Hook installieren
 try "Docker Hook-Verzeichnis anlegen" sudo mkdir -p "$HOOK_DIR"
 
 try "Docker Hook-Skript erstellen" bash -c "sudo tee $HOOK_SCRIPT > /dev/null <<'EOF'
@@ -120,14 +167,13 @@ try "Docker Hook JSON erstellen" bash -c "sudo tee $HOOK_FILE > /dev/null <<EOF
 EOF
 "
 
-# 🔎 Prüfung: ist rocminfo da?
+# Prüfung rocminfo
 if [[ -x "${ROCM_PATH}/bin/rocminfo" ]]; then
   SUCCESS_MSGS+="✅ rocminfo gefunden und ausführbar.\n"
 else
   ERROR_MSGS+="⚠️ rocminfo nicht gefunden oder nicht ausführbar. Bitte prüfen.\n"
 fi
 
-# ✅ Abschlussanzeige
 echo -e "\n🎉 Installationsergebnis:\n"
 echo -e "✅ Erfolgreiche Schritte:\n$SUCCESS_MSGS"
 if [[ -n "$ERROR_MSGS" ]]; then
@@ -136,7 +182,6 @@ else
   echo -e "Keine Fehler aufgetreten.\n"
 fi
 
-# 🔁 Automatischer Neustart nur bei Erfolg
 if [[ -z "$ERROR_MSGS" ]]; then
   echo -e "\n🔁 System wird in 10 Sekunden neu gestartet ..."
   sleep 10
