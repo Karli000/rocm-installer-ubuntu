@@ -137,6 +137,16 @@ if [ \"\$STATE\" != \"prestart\" ]; then
   exit 0
 fi
 
+# Umgebungsvariablen setzen (müssen im Hook auch verfügbar sein)
+export ROCM_PATH=\"${ROCM_PATH}\"
+export PATH=\"\$ROCM_PATH/bin:\$PATH\"
+export LD_LIBRARY_PATH=\"\$ROCM_PATH/lib:\$LD_LIBRARY_PATH\"
+
+# HSA_OVERRIDE_GFX_VERSION aus Profil laden, falls gesetzt
+if [ -f /etc/profile.d/rocm.sh ]; then
+  source /etc/profile.d/rocm.sh
+fi
+
 runc_state=\"\$RUNC_STATE\"
 
 jq '.linux.devices += [
