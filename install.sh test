@@ -184,6 +184,13 @@ else
   ERROR_MSGS+="⚠️ rocminfo nicht gefunden oder nicht ausführbar. Bitte prüfen.\n"
 fi
 
+# === HIER DIE ERGÄNZTE PRÜFUNG FÜR DEN CONTAINER-DEVICE-ZUGRIFF ===
+if docker run --rm --device=/dev/kfd --device=/dev/dri ubuntu bash -c "ls -l /dev/kfd /dev/dri" &>/dev/null; then
+  SUCCESS_MSGS+="✅ /dev/kfd und /dev/dri im Container verfügbar.\n"
+else
+  ERROR_MSGS+="❌ /dev/kfd und /dev/dri im Container NICHT verfügbar. Prüfe Docker Hook und Gerätefreigabe.\n"
+fi
+
 echo -e "\n🎉 Installationsergebnis:\n"
 echo -e "✅ Erfolgreiche Schritte:\n$SUCCESS_MSGS"
 if [[ -n "$ERROR_MSGS" ]]; then
