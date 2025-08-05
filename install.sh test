@@ -1,6 +1,13 @@
 #!/bin/bash
 set -e
 
+ROCM_VERSION="6.4.2"
+ROCM_PACKAGE="6.4.60402-1"
+ROCM_PATH="/opt/rocm-${ROCM_VERSION}"
+HOOK_DIR="/etc/docker/hooks"
+HOOK_FILE="$HOOK_DIR/add-amd-devices.json"
+HOOK_SCRIPT="/usr/local/bin/docker-amd-devices-hook"
+
 SUCCESS_MSGS=""
 ERROR_MSGS=""
 
@@ -24,7 +31,7 @@ echo "🚀 ROCm Repository und GPG-Key einrichten"
 try "ROCm Paketquellen einrichten und Paketlisten aktualisieren" bash -c "
   sudo mkdir -p /etc/apt/keyrings &&
   wget -qO - https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null &&
-  echo \"deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.4.2 noble main\" | sudo tee /etc/apt/sources.list.d/rocm.list &&
+  echo \"deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/${ROCM_VERSION} noble main\" | sudo tee /etc/apt/sources.list.d/rocm.list &&
   echo -e 'Package: *\nPin: release o=repo.radeon.com\nPin-Priority: 600' | sudo tee /etc/apt/preferences.d/rocm-pin-600 &&
   sudo apt update
 "
@@ -35,14 +42,12 @@ echo "🚀 Starte ROCm Installation"
 
 try "Build-Tools installieren" sudo apt install -y build-essential python3-setuptools python3-wheel wget
 
-# 🔧 Alle Benutzer mit UID ≥1000 zur Gruppe video & render hinzufügen
 try "Alle Benutzer zur Gruppe video & render hinzufügen" bash -c '
   for user in $(getent passwd | awk -F: "$3 >= 1000 && $1 != \"nobody\" {print \$1}"); do
     sudo usermod -aG video,render "$user"
   done
 '
 
-# 🔧 adduser.conf vorbereiten für zukünftige Benutzer
 try "adduser.conf vorbereiten (EXTRA_GROUPS)" bash -c '
   sudo sed -i "/^ADD_EXTRA_GROUPS/d" /etc/adduser.conf
   sudo sed -i "/^EXTRA_GROUPS/d" /etc/adduser.conf
@@ -50,7 +55,6 @@ try "adduser.conf vorbereiten (EXTRA_GROUPS)" bash -c '
   echo "EXTRA_GROUPS=video render" | sudo tee -a /etc/adduser.conf >/dev/null
 '
 
-# 🔧 udev-Regeln für Containerfreigabe
 try "udev-Regeln setzen für GPU-Zugriff" bash -c '
   sudo tee /etc/udev/rules.d/70-amdgpu.rules >/dev/null <<EOF
 KERNEL=="kfd", GROUP="video", MODE="0660"
@@ -65,29 +69,55 @@ try "udev Regeln neu laden" bash -c "
   sudo udevadm trigger
 "
 
-# 🔧 ROCm installieren
-ROCM_VERSION="6.4.2"
-ROCM_PATH="/opt/rocm-${ROCM_VERSION}"
-INSTALLER_URL="https://repo.radeon.com/amdgpu-install/${ROCM_VERSION}/ubuntu/noble/amdgpu-install_6.4.60402-1_all.deb"
-
-try "ROCm Installer herunterladen" wget -q "$INSTALLER_URL" -O amdgpu-install.deb
+try "ROCm Installer herunterladen" wget -q "https://repo.radeon.com/amdgpu-install/${ROCM_VERSION}/ubuntu/noble/amdgpu-install_${ROCM_PACKAGE}_all.deb" -O amdgpu-install.deb
 try "ROCm Installer Paket installieren" sudo apt install -y --allow-downgrades ./amdgpu-install.deb
 
 try "ROCm + SDKs installieren" bash -c "yes | sudo amdgpu-install --usecase=graphics,rocm,lrt,hip,opencl,mllib,rocmdevtools,hiplibsdk,openclsdk,openmpsdk,mlsdk --no-dkms --accept-eula"
 
-# 🔧 Umgebungsvariablen setzen
 try "ROCm PATH und Umgebungsvariablen setzen" bash -c "\
   echo 'export ROCM_PATH=${ROCM_PATH}' | sudo tee /etc/profile.d/rocm.sh >/dev/null && \
   echo 'export PATH=\$ROCM_PATH/bin:\$PATH' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null && \
   echo 'export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null && \
-  echo 'export HSA_OVERRIDE_GFX_VERSION=10.3.0' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null && \
-  echo '' >> ~/.bashrc && \
-  echo '# ROCm Umgebung' >> ~/.bashrc && \
-  echo 'export ROCM_PATH=${ROCM_PATH}' >> ~/.bashrc && \
-  echo 'export PATH=\$ROCM_PATH/bin:\$PATH' >> ~/.bashrc && \
-  echo 'export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH' >> ~/.bashrc && \
-  echo 'export HSA_OVERRIDE_GFX_VERSION=10.3.0' >> ~/.bashrc && \
-  source ~/.bashrc
+  echo 'export HSA_OVERRIDE_GFX_VERSION=10.3.0' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null
+"
+
+# 🔧 Docker Hook installieren
+try "Docker Hook-Verzeichnis anlegen" sudo mkdir -p "$HOOK_DIR"
+
+try "Docker Hook-Skript erstellen" bash -c "sudo tee $HOOK_SCRIPT > /dev/null <<'EOF'
+#!/bin/bash
+if [ \"\$STATE\" != \"prestart\" ]; then
+  exit 0
+fi
+
+runc_state=\"\$RUNC_STATE\"
+
+jq '.linux.devices += [
+  { \"path\": \"/dev/kfd\", \"type\": \"c\", \"major\": 0, \"minor\": 0, \"fileMode\": 438, \"uid\": 0, \"gid\": 0 },
+  { \"path\": \"/dev/dri\", \"type\": \"c\", \"major\": 0, \"minor\": 0, \"fileMode\": 438, \"uid\": 0, \"gid\": 0 }
+] |
+.linux.resources.devices += [
+  { \"allow\": true, \"access\": \"rwm\", \"type\": \"c\", \"major\": 0, \"minor\": 0 }
+]' < \"\$runc_state\" > \"\$runc_state.modified\"
+
+mv \"\$runc_state.modified\" \"\$runc_state\"
+EOF
+"
+
+try "Docker Hook-Skript ausführbar machen" sudo chmod +x "$HOOK_SCRIPT"
+
+try "Docker Hook JSON erstellen" bash -c "sudo tee $HOOK_FILE > /dev/null <<EOF
+{
+  \"version\": \"1.0.0\",
+  \"hook\": {
+    \"path\": \"$HOOK_SCRIPT\"
+  },
+  \"when\": {
+    \"always\": true
+  },
+  \"stages\": [\"prestart\"]
+}
+EOF
 "
 
 # 🔎 Prüfung: ist rocminfo da?
