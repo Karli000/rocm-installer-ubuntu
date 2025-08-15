@@ -2,207 +2,119 @@
 set -e
 
 ROCM_VERSION="6.4.2"
-ROCM_PACKAGE="6.4.60402-1"
 ROCM_PATH="/opt/rocm-${ROCM_VERSION}"
-HOOK_DIR="/etc/docker/hooks"
-HOOK_FILE="$HOOK_DIR/add-amd-devices.json"
-HOOK_SCRIPT="/usr/local/bin/docker-amd-devices-hook"
+CODENAME=$(source /etc/os-release && echo "$VERSION_CODENAME")
+[ -z "$CODENAME" ] && CODENAME=$(lsb_release -sc)
 
 SUCCESS_MSGS=""
 ERROR_MSGS=""
 
 function try {
-  description="$1"
-  shift
-  echo "🔧 $description ..."
-  if "$@"; then
-    SUCCESS_MSGS+="✅ $description erfolgreich.\n"
-  else
-    ERROR_MSGS+="❌ $description fehlgeschlagen.\n"
-    echo -e "\n🔴 Fehler bei: $description\n"
-    echo -e "\nErfolgreiche Schritte:\n$SUCCESS_MSGS"
-    echo -e "\nFehlerhafte Schritte:\n$ERROR_MSGS"
-    exit 1
-  fi
+    desc="$1"; shift
+    echo "🔧 $desc ..."
+    if "$@"; then
+        SUCCESS_MSGS+="\e[32m✅ $desc erfolgreich.\e[0m\n"
+        echo -e "\e[32m✅ $desc erfolgreich.\e[0m"
+    else
+        ERROR_MSGS+="\e[31m❌ $desc fehlgeschlagen.\e[0m\n"
+        echo -e "\e[31m❌ $desc fehlgeschlagen.\e[0m"
+    fi
 }
 
-echo "🚀 ROCm Repository und GPG-Key einrichten"
+# --- System vorbereiten ---
+try "apt update"           sudo apt update
+try "Pakete upgrade"       sudo apt upgrade -y
+try "Pakete dist-upgrade"  sudo apt dist-upgrade -y
+try "Build-Tools"          sudo apt install -y build-essential python3-setuptools python3-wheel wget jq
 
-try "ROCm Paketquellen einrichten und Paketlisten aktualisieren" bash -c "
-  sudo mkdir -p /etc/apt/keyrings &&
-  wget -qO - https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null &&
-  echo \"deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/${ROCM_VERSION} noble main\" | sudo tee /etc/apt/sources.list.d/rocm.list &&
-  echo -e 'Package: *\nPin: release o=repo.radeon.com\nPin-Priority: 600' | sudo tee /etc/apt/preferences.d/rocm-pin-600 &&
-  sudo apt update
+# --- ROCm Repo & Key ---
+try "ROCm Repo & GPG-Key" bash -c "
+    sudo mkdir -p --mode=0755 /etc/apt/keyrings
+    wget -qO - https://repo.radeon.com/rocm/rocm.gpg.key | \
+        gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
+    echo \"deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] \
+https://repo.radeon.com/rocm/apt/${ROCM_VERSION} ${CODENAME} main\" | \
+        sudo tee /etc/apt/sources.list.d/rocm.list
+    sudo apt update
 "
 
-try "Systempakete aktualisieren" sudo apt upgrade -y && sudo apt dist-upgrade -y && sudo apt install update-manager-core -y
-
-echo "🚀 Starte ROCm Installation"
-
-try "Build-Tools installieren" sudo apt install -y build-essential python3-setuptools python3-wheel wget
-
-try "Alle Benutzer zur Gruppe video & render hinzufügen" bash -c '
-  for user in $(getent passwd | awk -F: "$3 >= 1000 && $1 != \"nobody\" {print \$1}"); do
-    sudo usermod -aG video,render "$user"
-  done
-'
-
-try "adduser.conf vorbereiten (EXTRA_GROUPS)" bash -c '
-  sudo sed -i "/^ADD_EXTRA_GROUPS/d" /etc/adduser.conf
-  sudo sed -i "/^EXTRA_GROUPS/d" /etc/adduser.conf
-  echo "ADD_EXTRA_GROUPS=1" | sudo tee -a /etc/adduser.conf >/dev/null
-  echo "EXTRA_GROUPS=video render" | sudo tee -a /etc/adduser.conf >/dev/null
-'
-
-try "udev-Regeln setzen für GPU-Zugriff" bash -c '
-  sudo tee /etc/udev/rules.d/70-amdgpu.rules >/dev/null <<EOF
-KERNEL=="kfd", GROUP="video", MODE="0660"
-KERNEL=="renderD*", GROUP="video", MODE="0660"
-KERNEL=="card*", GROUP="video", MODE="0660"
-SUBSYSTEM=="drm", KERNEL=="controlD*", GROUP="video", MODE="0660"
+# --- udev-Regeln: offen für alle ---
+try "udev-Regeln" bash -c '
+    sudo tee /etc/udev/rules.d/70-amdgpu.rules >/dev/null <<EOF
+KERNEL=="kfd", MODE="0666"
+SUBSYSTEM=="drm", KERNEL=="renderD*", MODE="0666"
 EOF
 '
+try "udev reload" sudo udevadm control --reload-rules && sudo udevadm trigger
 
-try "udev Regeln neu laden" bash -c "
-  sudo udevadm control --reload-rules &&
-  sudo udevadm trigger
-"
-
-try "ROCm Installer herunterladen" wget -q "https://repo.radeon.com/amdgpu-install/${ROCM_VERSION}/ubuntu/noble/amdgpu-install_${ROCM_PACKAGE}_all.deb" -O amdgpu-install.deb
-try "ROCm Installer Paket installieren" sudo apt install -y --allow-downgrades ./amdgpu-install.deb
-
-try "ROCm + SDKs installieren" bash -c "yes | sudo amdgpu-install --usecase=graphics,rocm,lrt,hip,opencl,mllib,rocmdevtools,hiplibsdk,openclsdk,openmpsdk,mlsdk --no-dkms --accept-eula"
-
-# 1. Umgebungsvariablen global und bashrc setzen
-try "ROCm PATH und Umgebungsvariablen global und in bashrc setzen" bash -c "\
-  echo 'export ROCM_PATH=${ROCM_PATH}' | sudo tee /etc/profile.d/rocm.sh >/dev/null && \
-  echo 'export PATH=\$ROCM_PATH/bin:\$PATH' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null && \
-  echo 'export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null && \
-  if ! grep -q 'ROCM_PATH' ~/.bashrc; then \
-    echo 'export ROCM_PATH=${ROCM_PATH}' >> ~/.bashrc; \
-    echo 'export PATH=\$ROCM_PATH/bin:\$PATH' >> ~/.bashrc; \
-    echo 'export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH' >> ~/.bashrc; \
-  fi \
-"
-
-# 2. Variablen neu laden, damit rocminfo funktioniert
-echo "🔄 Lade Umgebungsvariablen neu..."
-source /etc/profile.d/rocm.sh
-source ~/.bashrc
-
-# 3. GFX-Erkennung mit Mapping für RDNA2 RX 6000 Serie
-declare -A gfx_map=(
-  ["1030"]="10.3.0"
-  ["1031"]="10.3.1"
-  ["1032"]="10.3.2"
-  ["1033"]="10.3.3"
-)
-
-echo "🔍 GFX-Version mit rocminfo auslesen..."
-gfx_code=$(rocminfo 2>/dev/null | grep 'gfx' | head -n1 | grep -oP 'gfx\K[0-9]{4}')
-if [[ -z "$gfx_code" ]]; then
-  echo "⚠️ Keine GFX-Version gefunden, HSA_OVERRIDE_GFX_VERSION wird nicht gesetzt."
-else
-  hsa_version="${gfx_map[$gfx_code]}"
-  if [[ -z "$hsa_version" ]]; then
-    echo "⚠️ GFX-Code $gfx_code nicht im Mapping gefunden, bitte manuell setzen."
-  else
-    echo "✅ GFX-Code $gfx_code erkannt, setze HSA_OVERRIDE_GFX_VERSION=$hsa_version"
-
-    # 4. HSA_OVERRIDE_GFX_VERSION global setzen (wenn noch nicht gesetzt)
-    if ! grep -q "HSA_OVERRIDE_GFX_VERSION" /etc/profile.d/rocm.sh; then
-      echo "export HSA_OVERRIDE_GFX_VERSION=$hsa_version" | sudo tee -a /etc/profile.d/rocm.sh >/dev/null
-    fi
-    # 5. HSA_OVERRIDE_GFX_VERSION in bashrc setzen (wenn noch nicht gesetzt)
-    if ! grep -q "HSA_OVERRIDE_GFX_VERSION" ~/.bashrc; then
-      echo "export HSA_OVERRIDE_GFX_VERSION=$hsa_version" >> ~/.bashrc
+# --- ROCm Installer automatisch finden & laden (Vorab-Check) ---
+try "ROCm Installer holen" bash -c "
+    if dpkg -s amdgpu-install 2>/dev/null | grep -q \"Version: ${ROCM_VERSION}\"; then
+        echo \"Installer schon in Version ${ROCM_VERSION} vorhanden – Schritt übersprungen.\"
+        exit 0
     fi
 
-    # 6. Variablen nochmal neu laden, damit HSA_OVERRIDE_GFX_VERSION aktiv ist
-    echo "🔄 Lade HSA_OVERRIDE_GFX_VERSION neu..."
-    source /etc/profile.d/rocm.sh
-    source ~/.bashrc
-
-    echo "🎉 HSA_OVERRIDE_GFX_VERSION erfolgreich gesetzt."
-  fi
-fi
-
-# Docker Hook installieren
-try "Docker Hook-Verzeichnis anlegen" sudo mkdir -p "$HOOK_DIR"
-
-try "Docker Hook-Skript erstellen" bash -c "sudo tee $HOOK_SCRIPT > /dev/null <<'EOF'
-#!/bin/bash
-if [ \"\$STATE\" != \"prestart\" ]; then
-  exit 0
-fi
-
-# Umgebungsvariablen setzen (müssen im Hook auch verfügbar sein)
-export ROCM_PATH=\"${ROCM_PATH}\"
-export PATH=\"\$ROCM_PATH/bin:\$PATH\"
-export LD_LIBRARY_PATH=\"\$ROCM_PATH/lib:\$LD_LIBRARY_PATH\"
-
-# HSA_OVERRIDE_GFX_VERSION aus Profil laden, falls gesetzt
-if [ -f /etc/profile.d/rocm.sh ]; then
-  source /etc/profile.d/rocm.sh
-fi
-
-runc_state=\"\$RUNC_STATE\"
-
-jq '.linux.devices += [
-  { \"path\": \"/dev/kfd\", \"type\": \"c\", \"major\": 0, \"minor\": 0, \"fileMode\": 438, \"uid\": 0, \"gid\": 0 },
-  { \"path\": \"/dev/dri\", \"type\": \"c\", \"major\": 0, \"minor\": 0, \"fileMode\": 438, \"uid\": 0, \"gid\": 0 }
-] |
-.linux.resources.devices += [
-  { \"allow\": true, \"access\": \"rwm\", \"type\": \"c\", \"major\": 0, \"minor\": 0 }
-]' < \"\$runc_state\" > \"\$runc_state.modified\"
-
-mv \"\$runc_state.modified\" \"\$runc_state\"
-EOF
+    LISTING_URL=https://repo.radeon.com/amdgpu-install/${ROCM_VERSION}/ubuntu/${CODENAME}/
+    PKG_NAME=\$(wget -qO - \"\$LISTING_URL\" | grep -oP 'amdgpu-install_[0-9.]+-[0-9]+_all\\.deb' | head -n1)
+    if [ -n \"\$PKG_NAME\" ]; then
+        wget -q \"\${LISTING_URL}\${PKG_NAME}\" -O /tmp/amdgpu-install.deb
+    else
+        echo 'Kein passendes amdgpu-install-Paket gefunden' >&2
+        exit 1
+    fi
+"
+# --- Installer nur ausführen, wenn Datei vorhanden ---
+try "Installer Paket" bash -c "
+    if [ -f /tmp/amdgpu-install.deb ] && [ -s /tmp/amdgpu-install.deb ]; then
+        sudo apt install -y --allow-downgrades /tmp/amdgpu-install.deb
+    else
+        echo 'Keine neue Installer-Datei vorhanden – Schritt übersprungen.'
+        exit 0
+    fi
 "
 
-try "Docker Hook-Skript ausführbar machen" sudo chmod +x "$HOOK_SCRIPT"
+try "ROCm + SDKs" bash -c "yes | sudo amdgpu-install \
+  --usecase=graphics,rocm,lrt,hip,opencl,mllib,rocmdevtools,hiplibsdk,openclsdk,openmpsdk,mlsdk \
+  --no-dkms --accept-eula"
 
-try "Docker Hook JSON erstellen" bash -c "sudo tee $HOOK_FILE > /dev/null <<EOF
-{
-  \"version\": \"1.0.0\",
-  \"hook\": {
-    \"path\": \"$HOOK_SCRIPT\"
-  },
-  \"when\": {
-    \"always\": true
-  },
-  \"stages\": [\"prestart\"]
-}
-EOF
-"
+# --- Env-Variablen nur global, vorher alte entfernen ---
+try "Env global" bash -c '
+    # Falls Datei existiert, alte Einträge rauswerfen
+    if [ -f /etc/profile.d/rocm.sh ]; then
+        sudo sed -i "/ROCM_PATH/d" /etc/profile.d/rocm.sh
+        sudo sed -i "/LD_LIBRARY_PATH/d" /etc/profile.d/rocm.sh
+        sudo sed -i "/PATH=.*ROCM_PATH/d" /etc/profile.d/rocm.sh
+    fi
 
-# Prüfung rocminfo
-if [[ -x "${ROCM_PATH}/bin/rocminfo" ]]; then
-  SUCCESS_MSGS+="✅ rocminfo gefunden und ausführbar.\n"
+    # Neue, saubere Einträge schreiben
+    echo "export ROCM_PATH=${ROCM_PATH}"            | sudo tee    /etc/profile.d/rocm.sh >/dev/null
+    echo "export PATH=\$ROCM_PATH/bin:\$PATH"         | sudo tee -a /etc/profile.d/rocm.sh >/dev/null
+    echo "export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH" \
+                                                     | sudo tee -a /etc/profile.d/rocm.sh >/dev/null
+
+    # Datei ausführbar machen
+    sudo chmod +x /etc/profile.d/rocm.sh
+'
+
+
+# --- Env neu laden ---
+try "Env neu laden" bash -c "source /etc/profile.d/rocm.sh || true"
+
+# --- ROCm-Test ---
+if rocminfo 2>/dev/null | grep -q 'gfx'; then
+    echo -e "\e[32m✅ ROCm‑Gerät erkannt\e[0m"
 else
-  ERROR_MSGS+="⚠️ rocminfo nicht gefunden oder nicht ausführbar. Bitte prüfen.\n"
+    echo -e "\e[31m⚠️ Kein ROCm‑fähiges Gerät gefunden\e[0m"
 fi
 
-# === HIER DIE ERGÄNZTE PRÜFUNG FÜR DEN CONTAINER-DEVICE-ZUGRIFF ===
-if docker run --rm --device=/dev/kfd --device=/dev/dri ubuntu bash -c "ls -l /dev/kfd /dev/dri" &>/dev/null; then
-  SUCCESS_MSGS+="✅ /dev/kfd und /dev/dri im Container verfügbar.\n"
-else
-  ERROR_MSGS+="❌ /dev/kfd und /dev/dri im Container NICHT verfügbar. Prüfe Docker Hook und Gerätefreigabe.\n"
-fi
-
-echo -e "\n🎉 Installationsergebnis:\n"
-echo -e "✅ Erfolgreiche Schritte:\n$SUCCESS_MSGS"
-if [[ -n "$ERROR_MSGS" ]]; then
-  echo -e "❌ Fehlgeschlagene Schritte:\n$ERROR_MSGS"
-else
-  echo -e "Keine Fehler aufgetreten.\n"
-fi
-
+# --- Neustart nur bei Erfolg ---
 if [[ -z "$ERROR_MSGS" ]]; then
-  echo -e "\n🔁 System wird in 10 Sekunden neu gestartet ..."
-  sleep 10
-  sudo reboot
+    echo "🔄 System wird in 10 Sekunden neu gestartet ..."
+    sleep 10
+    sudo reboot
 else
-  echo "⚠️ Aufgrund von Fehlern wird kein automatischer Neustart durchgeführt."
+    echo -e "\n❌ Es gab Fehler – kein automatischer Neustart."
+    echo -e "\nErfolgreich:\n$SUCCESS_MSGS"
+    echo -e "\nFehler:\n$ERROR_MSGS"
+    exit 1
 fi
