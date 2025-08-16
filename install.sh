@@ -1,92 +1,130 @@
 #!/bin/bash
 set -e
 
+# --- Interaktive Abfrage der ROCm-Version ---
+read -p "Welche ROCm-Version soll installiert werden? (z.B. 6.4.2): " ROCM_VERSION
+ROCM_PATH="/opt/rocm-${ROCM_VERSION}"
+
+# Abbruch, wenn keine Version angegeben wurde
+if [ -z "$ROCM_VERSION" ]; then
+    echo "❌ Keine Version angegeben. Abbruch."
+    exit 1
+fi
+
+echo "ℹ️ ROCm-Version ${ROCM_VERSION} wird installiert..."
+
+CODENAME=$(source /etc/os-release && echo "$VERSION_CODENAME")
+[ -z "$CODENAME" ] && CODENAME=$(lsb_release -sc)
+
 SUCCESS_MSGS=""
 ERROR_MSGS=""
 
 function try {
-  description="$1"
-  shift
-  echo "🔧 $description ..."
-  if "$@"; then
-    SUCCESS_MSGS+="✅ $description erfolgreich.\n"
-  else
-    ERROR_MSGS+="❌ $description fehlgeschlagen.\n"
-    echo -e "\n🔴 Fehler bei: $description\n"
-    echo -e "\nErfolgreiche Schritte:\n$SUCCESS_MSGS"
-    echo -e "\nFehlerhafte Schritte:\n$ERROR_MSGS"
-    exit 1
-  fi
+    desc="$1"; shift
+    echo "🔧 $desc ..."
+    if "$@"; then
+        SUCCESS_MSGS+="\e[32m✅ $desc erfolgreich.\e[0m\n"
+        echo -e "\e[32m✅ $desc erfolgreich.\e[0m"
+    else
+        ERROR_MSGS+="\e[31m❌ $desc fehlgeschlagen.\e[0m\n"
+        echo -e "\e[31m❌ $desc fehlgeschlagen.\e[0m"
+    fi
 }
 
-echo "🚀 ROCm Repository und GPG-Key einrichten"
+# --- System vorbereiten ---
+try "apt update"           sudo apt update
+try "Pakete upgrade"       sudo apt upgrade -y
+try "Pakete dist-upgrade"  sudo apt dist-upgrade -y
+try "Build-Tools"          sudo apt install -y build-essential python3-setuptools python3-wheel wget jq lsb-release gnupg
 
-try "ROCm Paketquellen einrichten und Paketlisten aktualisieren" bash -c "
-  sudo mkdir -p /etc/apt/keyrings &&
-  wget -qO - https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null &&
-  echo \"deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.4.2 noble main\" | sudo tee /etc/apt/sources.list.d/rocm.list &&
-  echo -e 'Package: *\nPin: release o=repo.radeon.com\nPin-Priority: 600' | sudo tee /etc/apt/preferences.d/rocm-pin-600 &&
-  sudo apt update
+# --- ROCm Repo & Key ---
+try "ROCm Repo & GPG-Key" bash -c "
+    sudo mkdir -p --mode=0755 /etc/apt/keyrings
+    wget -qO - https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
+    echo \"deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/${ROCM_VERSION} ${CODENAME} main\" | sudo tee /etc/apt/sources.list.d/rocm.list
+    sudo apt update
 "
 
-try "Systempakete aktualisieren" sudo apt upgrade -y && sudo apt upgrade -y && sudo apt dist-upgrade -y && sudo apt install update-manager-core -y
+# --- udev-Regeln: offen für Single-User ---
+try "udev-Regeln" bash -c '
+sudo tee /etc/udev/rules.d/70-amdgpu.rules >/dev/null <<EOF
+KERNEL=="kfd", MODE="0666"
+SUBSYSTEM=="drm", KERNEL=="renderD*", MODE="0666"
+EOF
+'
+try "udev reload" sudo udevadm control --reload-rules && sudo udevadm trigger
 
-
-echo "🚀 Starte ROCm Installation"
-
-try "Build-Tools installieren" sudo apt install -y build-essential python3-setuptools python3-wheel wget
-
-CURRENT_USER=$(logname)
-try "Benutzer zu video und render Gruppen hinzufügen" sudo usermod -a -G video,render "$CURRENT_USER"
-try "adduser.conf anpassen" bash -c "sudo sed -i '/^ADD_EXTRA_GROUPS/d' /etc/adduser.conf"
-try "adduser.conf anpassen" bash -c "sudo sed -i '/^EXTRA_GROUPS/d' /etc/adduser.conf"
-try "ADD_EXTRA_GROUPS setzen" bash -c "echo 'ADD_EXTRA_GROUPS=1' | sudo tee -a /etc/adduser.conf"
-try "EXTRA_GROUPS setzen" bash -c "echo 'EXTRA_GROUPS=video render' | sudo tee -a /etc/adduser.conf"
-
-ROCM_VERSION="6.4.2"
-ROCM_PATH="/opt/rocm-${ROCM_VERSION}"
-INSTALLER_URL="https://repo.radeon.com/amdgpu-install/${ROCM_VERSION}/ubuntu/noble/amdgpu-install_6.4.60402-1_all.deb"
-
-try "ROCm Installer herunterladen" wget -q "$INSTALLER_URL" -O amdgpu-install.deb
-try "ROCm Installer Paket installieren" sudo apt install -y --allow-downgrades ./amdgpu-install.deb
-
-try "ROCm + SDKs installieren" bash -c "yes | sudo amdgpu-install --usecase=dkms,graphics,rocm,lrt,hip,opencl,mllib,rocmdevtools,hiplibsdk,openclsdk,openmpsdk,mlsdk --accept-eula"
-
-try "ROCm PATH und Umgebungsvariablen systemweit und benutzerspezifisch setzen" bash -c "\
-  echo 'export ROCM_PATH=${ROCM_PATH}' | sudo tee /etc/profile.d/rocm.sh >/dev/null && \
-  echo 'export PATH=\$ROCM_PATH/bin:\$PATH' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null && \
-  echo 'export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null && \
-  echo 'export HSA_OVERRIDE_GFX_VERSION=10.3.0' | sudo tee -a /etc/profile.d/rocm.sh >/dev/null && \
-  echo '' >> ~/.bashrc && \
-  echo '# ROCm Umgebung' >> ~/.bashrc && \
-  echo 'export ROCM_PATH=${ROCM_PATH}' >> ~/.bashrc && \
-  echo 'export PATH=\$ROCM_PATH/bin:\$PATH' >> ~/.bashrc && \
-  echo 'export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH' >> ~/.bashrc && \
-  echo 'export HSA_OVERRIDE_GFX_VERSION=10.3.0' >> ~/.bashrc && \
-  source ~/.bashrc"
-
-
-
-# Prüfen, ob rocminfo vorhanden und ausführbar ist
-if [[ -x "${ROCM_PATH}/bin/rocminfo" ]]; then
-  SUCCESS_MSGS+="✅ rocminfo gefunden und ausführbar.\n"
+# --- ROCm Installer automatisch finden & laden ---
+try "ROCm Installer holen" bash -c "
+LISTING_URL=https://repo.radeon.com/amdgpu-install/${ROCM_VERSION}/ubuntu/${CODENAME}/
+PKG_NAME=\$(wget -qO - \"\$LISTING_URL\" | grep -oP 'amdgpu-install_[0-9.]+-[0-9]+_all\\.deb' | head -n1)
+if [ -n \"\$PKG_NAME\" ]; then
+    wget -q \"\${LISTING_URL}\${PKG_NAME}\" -O /tmp/amdgpu-install.deb
 else
-  ERROR_MSGS+="⚠️ rocminfo nicht gefunden oder nicht ausführbar. Bitte prüfen.\n"
+    echo 'Kein passendes amdgpu-install-Paket gefunden' >&2
+    exit 1
+fi
+"
+
+# --- Installer Paket ausführen ---
+try "Installer Paket" bash -c "
+if [ -f /tmp/amdgpu-install.deb ] && [ -s /tmp/amdgpu-install.deb ]; then
+    sudo apt install -y --allow-downgrades /tmp/amdgpu-install.deb
+else
+    echo 'Keine neue Installer-Datei vorhanden – Schritt übersprungen.'
+    exit 0
+fi
+"
+
+# --- ROCm + Grafik installieren (ohne DKMS, minimalistisch) ---
+try "ROCm + Grafik" bash -c "yes | sudo amdgpu-install \
+  --usecase=dkms,graphics,rocm \
+  --accept-eula"
+
+# --- ld.so.conf für ROCm Libraries ---
+try "ld.so.conf für ROCm" bash -c '
+sudo tee --append /etc/ld.so.conf.d/rocm.conf >/dev/null <<EOF
+/opt/rocm/lib
+/opt/rocm/lib64
+EOF
+sudo ldconfig
+'
+
+# --- Env-Variablen global setzen ---
+try "Env global" bash -c '
+# Alte Einträge entfernen
+if [ -f /etc/profile.d/rocm.sh ]; then
+    sudo sed -i "/ROCM_PATH/d" /etc/profile.d/rocm.sh
+    sudo sed -i "/LD_LIBRARY_PATH/d" /etc/profile.d/rocm.sh
+    sudo sed -i "/PATH=.*ROCM_PATH/d" /etc/profile.d/rocm.sh
 fi
 
-echo -e "\n🎉 Installationsergebnis:\n"
-echo -e "✅ Erfolgreiche Schritte:\n$SUCCESS_MSGS"
-if [[ -n "$ERROR_MSGS" ]]; then
-  echo -e "❌ Fehlgeschlagene Schritte:\n$ERROR_MSGS"
+# Neue Einträge
+echo "export ROCM_PATH=${ROCM_PATH}"            | sudo tee /etc/profile.d/rocm.sh >/dev/null
+echo "export PATH=\$ROCM_PATH/bin:\$PATH"      | sudo tee -a /etc/profile.d/rocm.sh >/dev/null
+echo "export LD_LIBRARY_PATH=\$ROCM_PATH/lib:\$LD_LIBRARY_PATH" | sudo tee -a /etc/profile.d/rocm.sh >/dev/null
+
+sudo chmod +x /etc/profile.d/rocm.sh
+'
+
+# --- Env neu laden für diese Shell ---
+try "Env neu laden" bash -c "source /etc/profile.d/rocm.sh || true"
+
+# --- ROCm-Test ---
+if rocminfo 2>/dev/null | grep -q 'gfx'; then
+    echo -e "\e[32m✅ ROCm-Gerät erkannt\e[0m"
 else
-  echo -e "Keine Fehler aufgetreten.\n"
+    echo -e "\e[31m⚠️ Kein ROCm-fähiges Gerät gefunden\e[0m"
 fi
 
-echo "ℹ️ Bitte nach dem Neustart erneut einloggen, damit Gruppen- und Umgebungsänderungen aktiv werden."
-
-read -p "🔁 System jetzt neu starten? (j/N): " answer
-if [[ "$answer" =~ ^[Jj]$ ]]; then
-  sudo reboot
+# --- Neustart nur bei Erfolg ---
+if [[ -z "$ERROR_MSGS" ]]; then
+    echo "🔄 System wird in 10 Sekunden neu gestartet ..."
+    sleep 10
+    sudo reboot
 else
-  echo "⏹️ Neustart abgebrochen. Bitte manuell neu starten, um Änderungen zu aktivieren."
+    echo -e "\n❌ Es gab Fehler – kein automatischer Neustart."
+    echo -e "\nErfolgreich:\n$SUCCESS_MSGS"
+    echo -e "\nFehler:\n$ERROR_MSGS"
+    exit 1
 fi
