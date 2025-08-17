@@ -27,11 +27,17 @@ chmod +x install.sh
 ./install.sh
 ```
 
-Am Ende erfolgt ein optionaler Neustart, um Gruppenänderungen zu aktivieren.
-
-🧪 Test
-Nach Installation:
-
 ```
-rocminfo
+nano HSA-Override-test.sh
+```
+```
+chmod +x HSA-Override-test.sh
+./HSA-Override-test.sh
+```
+```
+sudo nano amd-gpu-passthrough.sh
+```
+```
+sudo chmod +x amd-gpu-passthrough.sh
+sudo ./amd-gpu-passthrough.sh
 ```
