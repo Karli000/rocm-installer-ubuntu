@@ -1,18 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🔧 Setup für Container-Wrapper mit Startprüfung beginnt..."
-
-# --- Umgebung erkennen ---
-if [[ "$EUID" -ne 0 ]]; then
-  echo "🧑‍💻 Modus: Lokaler Benutzer"
-else
-  if [[ "$SUDO_USER" ]]; then
-    echo "🧑‍💼 Modus: sudo -i oder sudo su"
-  else
-    echo "🧑‍🔧 Modus: direkter Root"
-  fi
-fi
+echo "🔧 Starte vollständige Einrichtung für GPU-fähige Container..."
 
 # --- Gruppen vorbereiten ---
 GROUPS=("video" "render" "docker")
@@ -38,8 +27,23 @@ done
 
 echo "🔁 Hinweis: Gruppenrechte greifen erst nach Re-Login oder Neustart."
 
+# --- Programme installieren ---
+BINARIES=("docker" "podman" "buildah" "runc")
+for BIN in "${BINARIES[@]}"; do
+  if ! command -v "$BIN" &> /dev/null; then
+    echo "📥 '$BIN' nicht gefunden – versuche Installation..."
+    case "$BIN" in
+      docker) sudo apt update && sudo apt install -y docker.io ;;
+      podman) sudo apt install -y podman ;;
+      buildah) sudo apt install -y buildah ;;
+      runc) sudo apt install -y runc ;;
+    esac
+  else
+    echo "✅ '$BIN' ist bereits installiert."
+  fi
+done
+
 # --- Wrapper erstellen ---
-BINARIES=("docker" "nerdctl" "ctr" "podman" "buildah" "runc")
 WRAPPER_DIR="/usr/local/bin"
 ORIGINAL_DIR="/usr/bin"
 
@@ -47,12 +51,26 @@ for BIN in "${BINARIES[@]}"; do
   ORIGINAL="${ORIGINAL_DIR}/${BIN}-original"
   WRAPPER="${WRAPPER_DIR}/${BIN}"
 
+  # Dummy erzeugen, wenn Original fehlt
+  if [[ ! -f "${ORIGINAL_DIR}/${BIN}" && ! -f "$ORIGINAL" ]]; then
+    echo "⚠️ '$BIN' fehlt – erstelle Dummy unter '$ORIGINAL'"
+    sudo mkdir -p "$(dirname "$ORIGINAL")"
+    sudo tee "$ORIGINAL" > /dev/null <<EOF
+#!/bin/bash
+echo "❌ '$BIN' ist nicht installiert. Bitte installieren, um Container zu starten."
+exit 127
+EOF
+    sudo chmod +x "$ORIGINAL"
+  fi
+
+  # Original sichern
   if [[ -f "${ORIGINAL_DIR}/${BIN}" && ! -f "$ORIGINAL" ]]; then
     echo "📦 Sichere Original-Binary: $BIN"
     sudo mv "${ORIGINAL_DIR}/${BIN}" "$ORIGINAL"
     sudo chmod +x "$ORIGINAL"
   fi
 
+  # Wrapper schreiben
   echo "🛠️ Erstelle Wrapper für: $BIN"
   sudo tee "$WRAPPER" > /dev/null <<EOF
 #!/bin/bash
@@ -75,10 +93,10 @@ if [[ "\$CMD" == "run" || "\$CMD" == "create" || "\$CMD" == "start" ]]; then
   done
 
   EXTRA_ARGS=()
-  \$ADD_KFD && EXTRA_ARGS+=(--device=/dev/kfd)
-  \$ADD_DRI && EXTRA_ARGS+=(--device=/dev/dri)
-  \$ADD_VIDEO && EXTRA_ARGS+=(--group-add 44)
-  \$ADD_RENDER && EXTRA_ARGS+=(--group-add 103)
+  \$ADD_KFD && [[ -e /dev/kfd ]] && EXTRA_ARGS+=(--device=/dev/kfd)
+  \$ADD_DRI && [[ -e /dev/dri ]] && EXTRA_ARGS+=(--device=/dev/dri)
+  \$ADD_VIDEO && EXTRA_ARGS+=(--group-add video)
+  \$ADD_RENDER && EXTRA_ARGS+=(--group-add render)
 
   exec "\$ORIGINAL" "\$CMD" "\${EXTRA_ARGS[@]}" "\$@"
 else
@@ -91,4 +109,4 @@ EOF
   sudo ln -sf "$WRAPPER" "${ORIGINAL_DIR}/${BIN}"
 done
 
-echo "✅ Setup abgeschlossen. Alle Wrapper sind systemweit aktiv – inklusive GPU-Erweiterung und Gruppenprüfung."
+echo "✅ Einrichtung abgeschlossen. Containerbefehle sind GPU-ready und systemweit aktiv."
