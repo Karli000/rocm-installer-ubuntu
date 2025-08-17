@@ -23,7 +23,7 @@ Kann allein ausgeführt werden, unabhängig von den anderen Skripten
 
 📦 Download + Start  
 ```
-`wget -O install.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/install.sh && chmod +x install.sh && ./install.sh`
+wget -O install.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/install.sh && chmod +x install.sh && ./install.sh
 ```
 
 🛠️ amd-gpu-passthrough.sh – Gruppen & Container-Wrapper  
@@ -42,7 +42,7 @@ Kann allein ausgeführt werden, auch ohne vorheriges install.sh
 
 📦 Download + Start  
 ```
-`wget -O amd-gpu-passthrough.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/amd-gpu-passthrough.sh && sudo chmod +x amd-gpu-passthrough.sh && sudo ./amd-gpu-passthrough.sh`
+wget -O amd-gpu-passthrough.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/amd-gpu-passthrough.sh && sudo chmod +x amd-gpu-passthrough.sh && sudo ./amd-gpu-passthrough.sh
 ```
 
 🛠️ HSA-Override-test.sh – HSA_OVERRIDE prüfen/setzen  
@@ -62,7 +62,7 @@ Für Single-User-Setup funktioniert das sofort, sonst Re-Login nötig
 
 📦 Download + Start  
 ```
-`wget -O HSA-Override-test.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/HSA-Override-test.sh && chmod +x HSA-Override-test.sh && ./HSA-Override-test.sh`
+wget -O HSA-Override-test.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/HSA-Override-test.sh && chmod +x HSA-Override-test.sh && ./HSA-Override-test.sh
 ```
 
 Wichtige Hinweise
