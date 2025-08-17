@@ -1,3 +1,10 @@
+ROCm-Installer für Ubuntu 22.04 / 24.04 (Single-User, flexibel)
+Dieses Repository enthält drei Bash-Skripte zur Installation und Konfiguration von ROCm auf Ubuntu-Systemen mit AMD-GPUs. Die Skripte können einzeln ausgeführt werden – es ist nicht notwendig, alle Skripte zu nutzen.
+
+
+
+
+
 🛠️ install.sh – ROCm installieren
 🚀 Funktionen
 
