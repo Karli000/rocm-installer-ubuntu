@@ -87,3 +87,15 @@ Für Single-User-Setup funktioniert das sofort, sonst Re-Login nötig
 ```
 wget -O HSA-Override-test.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/HSA-Override-test.sh && chmod +x HSA-Override-test.sh && ./HSA-Override-test.sh
 ```
+
+
+Wichtige Hinweise
+
+udev-Regeln auf 0666 → volle Rechte für alle User auf GPU-Devices.
+In Multi-User-Systemen lieber 0660 + Gruppen video/render verwenden.
+
+Änderungen in /etc/profile.d/ greifen erst nach Re-Login oder source der jeweiligen Datei.
+
+Die Skripte können einzeln oder in beliebiger Reihenfolge ausgeführt werden.
+
+Für vollständige ROCm-Nutzung: zuerst install.sh, dann optional amd-gpu-passthrough.sh und/oder HSA-Override-test.sh.
