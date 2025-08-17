@@ -6,7 +6,7 @@ Die Skripte können einzeln ausgeführt werden – es ist nicht notwendig, alle 
 🛠️ install.sh – ROCm installieren  
 🚀 Funktionen
 
-Fragt gewünschte ROCm-Version ab (z. B. 6.4.2)  
+Fragt gewünschte ROCm-Version (z. B. 6.4.2)  
 Systemupdate & Paketinstallation (apt update/upgrade)  
 ROCm-Repository + GPG-Key einrichten  
 udev-Regeln mit 0666 für GPU-Zugriff (Single-User)  
