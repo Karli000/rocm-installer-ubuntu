@@ -2,8 +2,15 @@
 set -e
 
 # --- Interaktive Abfrage der ROCm-Version ---
-read -p "Welche ROCm-Version soll installiert werden? (z.B. 6.4.2): " ROCM_VERSION
+while [ -z "$ROCM_VERSION" ]; do
+    read -p "Welche ROCm-Version soll installiert werden? (z.B. 6.4.2): " ROCM_VERSION
+    if [ -z "$ROCM_VERSION" ]; then
+        echo "❌ Keine Version angegeben. Bitte erneut versuchen."
+    fi
+done
+
 ROCM_PATH="/opt/rocm-${ROCM_VERSION}"
+
 
 # Abbruch, wenn keine Version angegeben wurde
 if [ -z "$ROCM_VERSION" ]; then
