@@ -36,14 +36,19 @@ for grp in "${GROUPS[@]}"; do
   fi
 done
 
-echo "🔁 Hinweis: Gruppenrechte greifen normalerweise erst nach Re-Login oder Neustart."
-
-# --- Gruppenrechte direkt für die laufende Shell aktivieren ---
-if [[ "$CURRENT_USER" != "root" ]]; then
-  echo "🔑 Lade neue Gruppenrechte für $CURRENT_USER..."
-  newgrp video
-  newgrp render
+# sicherstellen dass auch der Benutzer 'docker' in video+render ist
+if id docker &>/dev/null; then
+  for grp in "${GROUPS[@]}"; do
+    if ! id -nG docker | grep -qw "$grp"; then
+      echo "➕ Füge Benutzer 'docker' zur Gruppe '$grp' hinzu..."
+      sudo usermod -aG "$grp" docker
+    else
+      echo "👤 Benutzer 'docker' ist bereits in Gruppe '$grp'."
+    fi
+  done
 fi
+
+echo "🔁 Hinweis: Gruppenrechte greifen normalerweise erst nach Re-Login oder Neustart."
 
 # --- runc installieren, falls nicht vorhanden ---
 ORIGINAL_RUNC="/usr/bin/runc"
@@ -125,33 +130,8 @@ EOF
 sudo chmod +x "$WRAPPER"
 sudo ln -sf "$WRAPPER" /usr/bin/docker
 
-# --- Gruppenrechte sofort aktivieren ---
-echo "🔑 Aktualisiere Gruppenrechte für Benutzer '$CURRENT_USER'..."
-if [[ "$CURRENT_USER" != "root" ]]; then
-  exec su - "$CURRENT_USER"
-fi
+echo "✅ Setup abgeschlossen. Docker-Wrapper und Gruppen sind eingerichtet."
 
-# --- GPU-Testcontainer automatisch bauen und starten ---
-echo "🧪 Baue und starte GPU-Testcontainer..."
-
-TEST_IMAGE="gpu-test:latest"
-
-cat > /tmp/Dockerfile.gpu-test <<'EOF'
-FROM ubuntu:22.04
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget pciutils usbutils \
-    && rm -rf /var/lib/apt/lists/*
-
-CMD echo "🔎 Starte GPU-Test..." && \
-    echo "--- Geräte im Container ---" && \
-    ls -l /dev/dri /dev/kfd || true
-EOF
-
-docker build -t $TEST_IMAGE -f /tmp/Dockerfile.gpu-test /tmp
-rm /tmp/Dockerfile.gpu-test
-
-docker run --rm $TEST_IMAGE
-
-echo "✅ Setup abgeschlossen. Docker-Wrapper und GPU-Test sind aktiv."
+# --- Automatischer Neustart ---
+echo "🔄 Starte System jetzt neu, damit Gruppenrechte sofort greifen..."
+sudo reboot
