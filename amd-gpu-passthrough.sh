@@ -132,6 +132,8 @@ sudo ln -sf "$WRAPPER" /usr/bin/docker
 
 echo "✅ Setup abgeschlossen. Docker-Wrapper und Gruppen sind eingerichtet."
 
-# --- Automatischer Neustart ---
-echo "🔄 Starte System jetzt neu, damit Gruppenrechte sofort greifen..."
+# --- Automatischer Neustart für aktuellen Benutzer ---
+CURRENT_USER=$(logname 2>/dev/null || echo "$USER")
+echo "🔄 Starte System neu, damit Gruppenrechte für '$CURRENT_USER' greifen..."
 sudo reboot
+
