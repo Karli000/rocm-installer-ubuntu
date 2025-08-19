@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🔧 Setup für Container-Wrapper mit Startprüfung beginnt..."
+echo "🔧 Setup für Docker-Wrapper mit Startprüfung beginnt..."
 
 # --- Umgebung erkennen ---
 if [[ "$EUID" -ne 0 ]]; then
@@ -15,7 +15,7 @@ else
 fi
 
 # --- Gruppen vorbereiten ---
-GROUPS=("video" "render" "docker")
+GROUPS=("video" "render")
 CURRENT_USER="${SUDO_USER:-$USER}"
 
 for grp in "${GROUPS[@]}"; do
@@ -36,71 +36,109 @@ for grp in "${GROUPS[@]}"; do
   fi
 done
 
-echo "🔁 Hinweis: Gruppenrechte greifen erst nach Re-Login oder Neustart."
+echo "🔁 Hinweis: Gruppenrechte greifen normalerweise erst nach Re-Login oder Neustart."
 
-# --- Wrapper erstellen ---
-BINARIES=("docker" "nerdctl" "ctr" "podman" "buildah" "runc")
-WRAPPER_DIR="/usr/local/bin"
-ORIGINAL_DIR="/usr/bin"
+# --- runc installieren, falls nicht vorhanden ---
+ORIGINAL_RUNC="/usr/bin/runc"
+if [[ ! -f "$ORIGINAL_RUNC" ]]; then
+  echo "📥 runc nicht gefunden – lade Binary herunter..."
+  wget -q https://github.com/opencontainers/runc/releases/download/v1.1.9/runc.amd64 -O /tmp/runc
+  sudo mv /tmp/runc "$ORIGINAL_RUNC"
+  sudo chmod +x "$ORIGINAL_RUNC"
+  echo "✅ runc erfolgreich installiert."
+fi
 
-for BIN in "${BINARIES[@]}"; do
-  ORIGINAL="${ORIGINAL_DIR}/${BIN}-original"
-  WRAPPER="${WRAPPER_DIR}/${BIN}"
+# --- Docker installieren, falls nicht vorhanden ---
+if ! command -v docker &>/dev/null; then
+  echo "📦 Docker nicht gefunden – installiere docker.io..."
+  sudo apt-get update
+  sudo apt-get install -y docker.io
+  sudo systemctl enable --now docker
+  echo "✅ Docker erfolgreich installiert."
+fi
 
-  # --- runc automatisch herunterladen, wenn nicht vorhanden ---
-  if [[ "$BIN" == "runc" && ! -f "${ORIGINAL_DIR}/runc" ]]; then
-    echo "📥 runc nicht gefunden – lade Binary herunter..."
-    wget -q https://github.com/opencontainers/runc/releases/download/v1.1.9/runc.amd64 -O /tmp/runc
-    sudo mv /tmp/runc "${ORIGINAL_DIR}/runc"
-    sudo chmod +x "${ORIGINAL_DIR}/runc"
-    echo "✅ runc erfolgreich installiert."
-  fi
+# --- Docker Wrapper erstellen ---
+WRAPPER="/usr/local/bin/docker"
+ORIGINAL_DOCKER="/usr/bin/docker-original"
 
-  if [[ -f "${ORIGINAL_DIR}/${BIN}" && ! -f "$ORIGINAL" ]]; then
-    echo "📦 Sichere Original-Binary: $BIN"
-    sudo mv "${ORIGINAL_DIR}/${BIN}" "$ORIGINAL"
-    sudo chmod +x "$ORIGINAL"
-  fi
+if [[ -f "/usr/bin/docker" && ! -f "$ORIGINAL_DOCKER" ]]; then
+  echo "📦 Sichere Original-Docker-Binary"
+  sudo mv /usr/bin/docker "$ORIGINAL_DOCKER"
+  sudo chmod +x "$ORIGINAL_DOCKER"
+fi
 
-  echo "🛠️ Erstelle Wrapper für: $BIN"
-  sudo tee "$WRAPPER" > /dev/null <<EOF
+echo "🛠️ Erstelle Docker-Wrapper"
+sudo tee "$WRAPPER" > /dev/null <<'EOF'
 #!/bin/bash
-CMD="\$1"
+CMD="$1"
 shift
 
-ORIGINAL="/usr/bin/${BIN}-original"
+ORIGINAL="/usr/bin/docker-original"
 
-VIDEO_GID=\$(getent group video | cut -d: -f3)
-RENDER_GID=\$(getent group render | cut -d: -f3)
+VIDEO_GID=$(getent group video | cut -d: -f3)
+RENDER_GID=$(getent group render | cut -d: -f3)
 
-if [[ "\$CMD" == "run" || "\$CMD" == "create" || "\$CMD" == "start" ]]; then
+if [[ "$CMD" == "run" || "$CMD" == "create" || "$CMD" == "start" ]]; then
   ADD_KFD=true
   ADD_DRI=true
   ADD_VIDEO=true
   ADD_RENDER=true
 
-  for arg in "\$@"; do
-    [[ "\$arg" == "--device=/dev/kfd" ]] && ADD_KFD=false
-    [[ "\$arg" == "--device=/dev/dri" || "\$arg" == --device=/dev/dri/* ]] && ADD_DRI=false
-    [[ "\$arg" == "--group-add" && "\$arg" == *"video"* ]] && ADD_VIDEO=false
-    [[ "\$arg" == "--group-add" && "\$arg" == *"render"* ]] && ADD_RENDER=false
+  i=0
+  while [[ $i -lt $# ]]; do
+    arg="${!i}"
+    case "$arg" in
+      --device=/dev/kfd*) ADD_KFD=false ;;
+      --device=/dev/dri*) ADD_DRI=false ;;
+      --group-add)
+        next=$((i+1))
+        if [[ "${!next}" == "video" || "${!next}" == "$VIDEO_GID" ]]; then
+          ADD_VIDEO=false
+        fi
+        if [[ "${!next}" == "render" || "${!next}" == "$RENDER_GID" ]]; then
+          ADD_RENDER=false
+        fi
+        ;;
+    esac
+    ((i++))
   done
 
   EXTRA_ARGS=()
-  \$ADD_KFD && EXTRA_ARGS+=(--device=/dev/kfd)
-  \$ADD_DRI && EXTRA_ARGS+=(--device=/dev/dri)
-  \$ADD_VIDEO && EXTRA_ARGS+=(--group-add "\$VIDEO_GID")
-  \$ADD_RENDER && EXTRA_ARGS+=(--group-add "\$RENDER_GID")
+  $ADD_KFD   && EXTRA_ARGS+=(--device=/dev/kfd)
+  $ADD_DRI   && EXTRA_ARGS+=(--device=/dev/dri)
+  $ADD_VIDEO && EXTRA_ARGS+=(--group-add "$VIDEO_GID")
+  $ADD_RENDER&& EXTRA_ARGS+=(--group-add "$RENDER_GID")
 
-  exec "\$ORIGINAL" "\$CMD" "\${EXTRA_ARGS[@]}" "\$@"
+  exec "$ORIGINAL" "$CMD" "${EXTRA_ARGS[@]}" "$@"
 else
-  exec "\$ORIGINAL" "\$CMD" "\$@"
+  exec "$ORIGINAL" "$CMD" "$@"
 fi
 EOF
 
-  sudo chmod +x "$WRAPPER"
-  echo "🔗 Verlinke Wrapper nach /usr/bin/$BIN"
-  sudo ln -sf "$WRAPPER" "${ORIGINAL_DIR}/${BIN}"
-done
+sudo chmod +x "$WRAPPER"
+sudo ln -sf "$WRAPPER" /usr/bin/docker
 
-echo "✅ Setup abgeschlossen. Alle Wrapper sind systemweit aktiv – inklusive GPU-Erweiterung und Gruppenprüfung."
+# --- GPU-Testcontainer automatisch bauen und starten ---
+echo "🧪 Baue und starte GPU-Testcontainer..."
+
+TEST_IMAGE="gpu-test:latest"
+
+cat > /tmp/Dockerfile.gpu-test <<'EOF'
+FROM ubuntu:22.04
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget pciutils usbutils \
+    && rm -rf /var/lib/apt/lists/*
+
+CMD echo "🔎 Starte GPU-Test..." && \
+    echo "--- Geräte im Container ---" && \
+    ls -l /dev/dri /dev/kfd || true
+EOF
+
+docker build -t $TEST_IMAGE -f /tmp/Dockerfile.gpu-test /tmp
+rm /tmp/Dockerfile.gpu-test
+
+docker run --rm $TEST_IMAGE
+
+echo "✅ Setup abgeschlossen. Docker-Wrapper und GPU-Test sind aktiv."
