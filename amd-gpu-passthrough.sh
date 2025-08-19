@@ -125,6 +125,12 @@ EOF
 sudo chmod +x "$WRAPPER"
 sudo ln -sf "$WRAPPER" /usr/bin/docker
 
+# --- Gruppenrechte sofort aktivieren ---
+echo "🔑 Aktualisiere Gruppenrechte für Benutzer '$CURRENT_USER'..."
+if [[ "$CURRENT_USER" != "root" ]]; then
+  exec su - "$CURRENT_USER"
+fi
+
 # --- GPU-Testcontainer automatisch bauen und starten ---
 echo "🧪 Baue und starte GPU-Testcontainer..."
 
