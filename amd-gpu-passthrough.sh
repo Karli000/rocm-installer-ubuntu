@@ -38,6 +38,13 @@ done
 
 echo "🔁 Hinweis: Gruppenrechte greifen normalerweise erst nach Re-Login oder Neustart."
 
+# --- Gruppenrechte direkt für die laufende Shell aktivieren ---
+if [[ "$CURRENT_USER" != "root" ]]; then
+  echo "🔑 Lade neue Gruppenrechte für $CURRENT_USER..."
+  newgrp video
+  newgrp render
+fi
+
 # --- runc installieren, falls nicht vorhanden ---
 ORIGINAL_RUNC="/usr/bin/runc"
 if [[ ! -f "$ORIGINAL_RUNC" ]]; then
