@@ -36,19 +36,13 @@ for grp in "${GROUPS[@]}"; do
   fi
 done
 
-# sicherstellen dass auch der Benutzer 'docker' in video+render ist
-if id docker &>/dev/null; then
-  for grp in "${GROUPS[@]}"; do
-    if ! id -nG docker | grep -qw "$grp"; then
-      echo "➕ Füge Benutzer 'docker' zur Gruppe '$grp' hinzu..."
-      sudo usermod -aG "$grp" docker
-    else
-      echo "👤 Benutzer 'docker' ist bereits in Gruppe '$grp'."
-    fi
-  done
+# --- sicherstellen dass CURRENT_USER in docker-Gruppe ist ---
+if ! id -nG "$CURRENT_USER" | grep -qw docker; then
+  echo "➕ Füge Benutzer '$CURRENT_USER' zur Docker-Gruppe hinzu..."
+  sudo usermod -aG docker "$CURRENT_USER"
+else
+  echo "👤 Benutzer '$CURRENT_USER' ist bereits in Docker-Gruppe."
 fi
-
-echo "🔁 Hinweis: Gruppenrechte greifen normalerweise erst nach Re-Login oder Neustart."
 
 # --- runc installieren, falls nicht vorhanden ---
 ORIGINAL_RUNC="/usr/bin/runc"
@@ -133,7 +127,5 @@ sudo ln -sf "$WRAPPER" /usr/bin/docker
 echo "✅ Setup abgeschlossen. Docker-Wrapper und Gruppen sind eingerichtet."
 
 # --- Automatischer Neustart für aktuellen Benutzer ---
-CURRENT_USER=$(logname 2>/dev/null || echo "$USER")
-echo "🔄 Starte System neu, damit Gruppenrechte für '$CURRENT_USER' greifen..."
+echo "🔄 Starte System neu
 sudo reboot
-
