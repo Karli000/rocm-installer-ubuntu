@@ -65,7 +65,7 @@ Für Single-User-Setup funktioniert das sofort, sonst Re-Login nötig
 wget -O HSA-Override-test.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/HSA-Override-test.sh && chmod +x HSA-Override-test.sh && ./HSA-Override-test.sh
 ```
 
-🛠️ passthrough-test.sh – GPU-Passthrough im Container testen 
+🛠️ passthrough-test.sh – GPU-Passthrough im Container testen
 🚀 Funktionen
 
 Erstellt temporäres Docker-Image zur Prüfung von GPU-Zugriff im Container
