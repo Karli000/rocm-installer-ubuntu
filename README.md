@@ -1,6 +1,6 @@
 # ROCm Installer for Ubuntu 24.04 (Single-User, Flexible)
 
-This repository contains three Bash scripts for installing and configuring ROCm on Ubuntu systems with AMD GPUs.
+This repository contains Bash scripts for installing and configuring ROCm on Ubuntu systems with AMD GPUs.
 The scripts can be executed individually – it is not necessary to use all of them.
 
 ## 🛠️ install.sh – Install ROCm
@@ -95,7 +95,7 @@ For full ROCm usage: run install.sh first, then optionally amd-gpu-passthrough.s
 
 # ROCm-Installer für Ubuntu 24.04 (Single-User, flexibel)
 
-Dieses Repository enthält drei Bash-Skripte zur Installation und Konfiguration von ROCm auf Ubuntu-Systemen mit AMD-GPUs.  
+Dieses Repository enthält Bash-Skripte zur Installation und Konfiguration von ROCm auf Ubuntu-Systemen mit AMD-GPUs.  
 Die Skripte können einzeln ausgeführt werden – es ist nicht notwendig, alle Skripte zu nutzen.
 
 ## 🛠️ install.sh – ROCm installieren  
