@@ -21,71 +21,70 @@ Can be run without sudo
 After execution: source /etc/profile.d/rocm.sh or re-login required
 Can be executed standalone, independent of the other scripts
 
-📦 Download + Run
+### 📦 Download + Run
 
 ```
 wget -O install.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/install.sh && chmod +x install.sh && ./install.sh
 ```
 
-🛠️ amd-gpu-passthrough.sh – Groups & Container Wrapper
-🚀 Features
+## 🛠️ amd-gpu-passthrough.sh – Groups & Container Wrapper
+### 🚀 Features
 
 Checks root/user context
 Creates groups video, render, docker if missing
 Adds current user to these groups
 Creates wrappers for tools (docker, nerdctl, podman) in /usr/local/bin
 
-🧩 Notes
+### 🧩 Notes
 
 Must be run with root/sudo
 Group membership effective after re-login or newgrp
 Can be executed standalone, even without running install.sh first
 
-📦 Download + Run
+### 📦 Download + Run
 
 ```
 wget -O amd-gpu-passthrough.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/amd-gpu-passthrough.sh && sudo chmod +x amd-gpu-passthrough.sh && sudo ./amd-gpu-passthrough.sh
 ```
 
-🛠️ HSA-Override-test.sh – Check/Set HSA_OVERRIDE
-🚀 Features
+## 🛠️ HSA-Override-test.sh – Check/Set HSA_OVERRIDE
+### 🚀 Features
 
 Detects GPU codes (RDNA1/2/3)
 Displays recommended overrides
 Asks whether to set override globally
 Notes if no override is needed
 
-🧩 Notes
+### 🧩 Notes
 
 Can be run normally
 Optional sudo if write access in /etc/profile.d/ is required
 Can be executed standalone, even without install.sh
 Works immediately for single-user setups, otherwise re-login required
 
-📦 Download + Run
+### 📦 Download + Run
 
 ```
 wget -O HSA-Override-test.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/HSA-Override-test.sh && chmod +x HSA-Override-test.sh && ./HSA-Override-test.sh
 ```
-
-🛠️ passthrough-test.sh – Test GPU Passthrough in Container
-🚀 Features
+## 🛠️ passthrough-test.sh – Test GPU Passthrough in Container
+### 🚀 Features
 
 Builds a temporary Docker image to check GPU access inside containers
 Shows whether /dev/kfd and /dev/dri are available in the container
 Useful for validating ROCm compatibility in containerized setups
 
-🧩 Notes
+### 🧩 Notes
 
 Can be run without root privileges
 Only shows devices that were correctly passed through at container start
 
-📦 Download + Run
+### 📦 Download + Run
 ```
 wget -O passthrough-test.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/passthrough-test.sh && chmod +x passthrough-test.sh && ./passthrough-test.sh
 ```
 
-⚠️ Important Notes
+### ⚠️ Important Notes
 
 udev rules set to 0666 → full access for all users to GPU devices.
 For multi-user systems, use 0660 + video/render groups instead.
@@ -99,8 +98,8 @@ For full ROCm usage: run install.sh first, then optionally amd-gpu-passthrough.s
 Dieses Repository enthält drei Bash-Skripte zur Installation und Konfiguration von ROCm auf Ubuntu-Systemen mit AMD-GPUs.  
 Die Skripte können einzeln ausgeführt werden – es ist nicht notwendig, alle Skripte zu nutzen.
 
-🛠️ install.sh – ROCm installieren  
-🚀 Funktionen
+## 🛠️ install.sh – ROCm installieren  
+### 🚀 Funktionen
 
 Fragt gewünschte ROCm-Version (z. B. 6.4.2)  
 Systemupdate & Paketinstallation (apt update/upgrade)  
@@ -111,75 +110,75 @@ Setzt PATH + LD_LIBRARY_PATH in /etc/profile.d/rocm.sh
 Test via rocminfo  
 Optional: automatischer Neustart bei Erfolg
 
-🧩 Hinweise
+### 🧩 Hinweise
 
 Kann ohne sudo ausgeführt werden  
 Nach Ausführung: source /etc/profile.d/rocm.sh oder Re-Login nötig  
 Kann allein ausgeführt werden, unabhängig von den anderen Skripten
 
-📦 Download + Start  
+### 📦 Download + Start  
 ```
 wget -O install.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/install.sh && chmod +x install.sh && ./install.sh
 ```
 
-🛠️ amd-gpu-passthrough.sh – Gruppen & Container-Wrapper  
-🚀 Funktionen
+## 🛠️ amd-gpu-passthrough.sh – Gruppen & Container-Wrapper  
+### 🚀 Funktionen
 
 Prüft Root/User-Kontext  
 Erstellt Gruppen video, render, docker falls nicht vorhanden  
 Fügt aktuellen User zu den Gruppen hinzu  
 Erstellt Wrapper für Tools (docker, nerdctl, podman) in /usr/local/bin
 
-🧩 Hinweise
+### 🧩 Hinweise
 
 Muss mit Root/Sudo laufen  
 Gruppenzugehörigkeit wirksam nach Re-Login oder newgrp  
 Kann allein ausgeführt werden, auch ohne vorheriges install.sh
 
-📦 Download + Start  
+### 📦 Download + Start  
 ```
 wget -O amd-gpu-passthrough.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/amd-gpu-passthrough.sh && sudo chmod +x amd-gpu-passthrough.sh && sudo ./amd-gpu-passthrough.sh
 ```
 
-🛠️ HSA-Override-test.sh – HSA_OVERRIDE prüfen/setzen  
-🚀 Funktionen
+## 🛠️ HSA-Override-test.sh – HSA_OVERRIDE prüfen/setzen  
+### 🚀 Funktionen
 
 Erkennt GPU-Codes (RDNA1/2/3)  
 Zeigt empfohlene Overrides an  
 Fragt, ob Override global gesetzt werden soll  
 Hinweis, falls kein Override nötig
 
-🧩 Hinweise
+### 🧩 Hinweise
 
 Normal ausführen möglich  
 Optional sudo, falls Schreibrechte in /etc/profile.d/ erforderlich  
 Kann allein ausgeführt werden, auch ohne install.sh  
 Für Single-User-Setup funktioniert das sofort, sonst Re-Login nötig
 
-📦 Download + Start  
+### 📦 Download + Start  
 ```
 wget -O HSA-Override-test.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/HSA-Override-test.sh && chmod +x HSA-Override-test.sh && ./HSA-Override-test.sh
 ```
 
-🛠️ passthrough-test.sh – GPU-Passthrough im Container testen
-🚀 Funktionen
+## 🛠️ passthrough-test.sh – GPU-Passthrough im Container testen
+### 🚀 Funktionen
 
 Erstellt temporäres Docker-Image zur Prüfung von GPU-Zugriff im Container
 Zeigt, ob /dev/kfd und /dev/dri im Container verfügbar sind
 Nützlich zur Validierung von ROCm-Kompatibilität bei Containerisierung
 
-🧩 Hinweise
+### 🧩 Hinweise
 
 Kann ohne Root-Rechte ausgeführt werden
 Zeigt nur Geräte, die beim Containerstart korrekt durchgereicht wurden
 
-📦 Download + Start
+### 📦 Download + Start
 
 ```
 wget -O passthrough-test.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/passthrough-test.sh && chmod +x passthrough-test.sh && ./passthrough-test.sh
 ```
 
-Wichtige Hinweise
+### Wichtige Hinweise
 
 udev-Regeln auf 0666 → volle Rechte für alle User auf GPU-Devices.  
 In Multi-User-Systemen lieber 0660 + Gruppen video/render verwenden.  
