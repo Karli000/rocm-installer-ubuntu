@@ -27,7 +27,7 @@ Can be executed standalone, independent of the other scripts
 wget -O install.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/install.sh && chmod +x install.sh && ./install.sh
 ```
 
-## 🛠️ amd-gpu-passthrough.sh – Groups & Container Wrapper
+## 🛠️ docker-passthrough.sh – Groups & Container Wrapper
 ### 🚀 Features
 
 Checks root/user context
@@ -121,7 +121,7 @@ Kann allein ausgeführt werden, unabhängig von den anderen Skripten
 wget -O install.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/install.sh && chmod +x install.sh && ./install.sh
 ```
 
-## 🛠️ amd-gpu-passthrough.sh – Gruppen & Container-Wrapper  
+## 🛠️ docker-passthrough.sh – Gruppen & Container-Wrapper  
 ### 🚀 Funktionen
 
 Prüft Root/User-Kontext  
