@@ -1,3 +1,123 @@
+ROCm Installer for Ubuntu 24.04 (Single-User, Flexible)
+
+This repository contains three Bash scripts for installing and configuring ROCm on Ubuntu systems with AMD GPUs.
+The scripts can be executed individually – it is not necessary to use all of them.
+
+🛠️ install.sh – Install ROCm
+🚀 Features
+
+Prompts for desired ROCm version (e.g., 6.4.2)
+
+System update & package installation (apt update/upgrade)
+
+Sets up ROCm repository + GPG key
+
+Adds udev rules with 0666 for GPU access (single-user)
+
+Installs an amdgpu-installer package (if available)
+
+Sets PATH + LD_LIBRARY_PATH in /etc/profile.d/rocm.sh
+
+Test via rocminfo
+
+Optional: automatic reboot on success
+
+🧩 Notes
+
+Can be run without sudo
+
+After execution: source /etc/profile.d/rocm.sh or re-login required
+
+Can be executed standalone, independent of the other scripts
+
+📦 Download + Run
+
+wget -O install.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/install.sh && chmod +x install.sh && ./install.sh
+
+
+🛠️ amd-gpu-passthrough.sh – Groups & Container Wrapper
+🚀 Features
+
+Checks root/user context
+
+Creates groups video, render, docker if missing
+
+Adds current user to these groups
+
+Creates wrappers for tools (docker, nerdctl, podman) in /usr/local/bin
+
+🧩 Notes
+
+Must be run with root/sudo
+
+Group membership effective after re-login or newgrp
+
+Can be executed standalone, even without running install.sh first
+
+📦 Download + Run
+
+wget -O amd-gpu-passthrough.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/amd-gpu-passthrough.sh && sudo chmod +x amd-gpu-passthrough.sh && sudo ./amd-gpu-passthrough.sh
+
+
+🛠️ HSA-Override-test.sh – Check/Set HSA_OVERRIDE
+🚀 Features
+
+Detects GPU codes (RDNA1/2/3)
+
+Displays recommended overrides
+
+Asks whether to set override globally
+
+Notes if no override is needed
+
+🧩 Notes
+
+Can be run normally
+
+Optional sudo if write access in /etc/profile.d/ is required
+
+Can be executed standalone, even without install.sh
+
+Works immediately for single-user setups, otherwise re-login required
+
+📦 Download + Run
+
+wget -O HSA-Override-test.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/HSA-Override-test.sh && chmod +x HSA-Override-test.sh && ./HSA-Override-test.sh
+
+
+🛠️ passthrough-test.sh – Test GPU Passthrough in Container
+🚀 Features
+
+Builds a temporary Docker image to check GPU access inside containers
+
+Shows whether /dev/kfd and /dev/dri are available in the container
+
+Useful for validating ROCm compatibility in containerized setups
+
+🧩 Notes
+
+Can be run without root privileges
+
+Only shows devices that were correctly passed through at container start
+
+📦 Download + Run
+
+wget -O passthrough-test.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/passthrough-test.sh && chmod +x passthrough-test.sh && ./passthrough-test.sh
+
+
+⚠️ Important Notes
+
+udev rules set to 0666 → full access for all users to GPU devices.
+For multi-user systems, use 0660 + video/render groups instead.
+
+Changes in /etc/profile.d/ take effect only after re-login or source of the respective file.
+
+The scripts can be executed individually or in any order.
+
+For full ROCm usage: run install.sh first, then optionally amd-gpu-passthrough.sh and/or HSA-Override-test.sh.
+
+
+# Deutsch
 # ROCm-Installer für Ubuntu 24.04 (Single-User, flexibel)
 
 Dieses Repository enthält drei Bash-Skripte zur Installation und Konfiguration von ROCm auf Ubuntu-Systemen mit AMD-GPUs.  
