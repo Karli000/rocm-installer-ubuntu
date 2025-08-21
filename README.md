@@ -1,4 +1,4 @@
-# ROCm-Installer für Ubuntu 22.04 / 24.04 (Single-User, flexibel)
+# ROCm-Installer für Ubuntu 24.04 (Single-User, flexibel)
 
 Dieses Repository enthält drei Bash-Skripte zur Installation und Konfiguration von ROCm auf Ubuntu-Systemen mit AMD-GPUs.  
 Die Skripte können einzeln ausgeführt werden – es ist nicht notwendig, alle Skripte zu nutzen.
@@ -63,6 +63,23 @@ Für Single-User-Setup funktioniert das sofort, sonst Re-Login nötig
 📦 Download + Start  
 ```
 wget -O HSA-Override-test.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/HSA-Override-test.sh && chmod +x HSA-Override-test.sh && ./HSA-Override-test.sh
+```
+
+🛠️ passthrough-test.sh – GPU-Passthrough im Container testen 🚀 Funktionen
+
+Erstellt temporäres Docker-Image zur Prüfung von GPU-Zugriff im Container
+Zeigt, ob /dev/kfd und /dev/dri im Container verfügbar sind
+Nützlich zur Validierung von ROCm-Kompatibilität bei Containerisierung
+
+🧩 Hinweise
+
+Kann ohne Root-Rechte ausgeführt werden
+Zeigt nur Geräte, die beim Containerstart korrekt durchgereicht wurden
+
+📦 Download + Start
+
+```
+wget -O passthrough-test.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/passthrough-test.sh && chmod +x passthrough-test.sh && ./passthrough-test.sh
 ```
 
 Wichtige Hinweise
