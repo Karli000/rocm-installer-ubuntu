@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🔧 Setup für Docker-Wrapper mit Startprüfung beginnt..."
+echo "🔧 Setup für GPU- und Docker-Gruppen beginnt..."
 
 # --- Prüfen ob Skript als root läuft ---
 if [[ "$EUID" -ne 0 ]]; then
@@ -18,7 +18,7 @@ else
 fi
 
 # --- Gruppen vorbereiten ---
-GROUPS=("video" "render")
+GROUPS=("video" "render" "docker")  # Docker-Gruppe wird ebenfalls erstellt
 
 for grp in "${GROUPS[@]}"; do
   if ! getent group "$grp" > /dev/null; then
@@ -39,18 +39,10 @@ for grp in "${GROUPS[@]}"; do
   fi
 done
 
-# --- Docker-Gruppe ---
-if ! id -nG "$CURRENT_USER" | grep -qw docker; then
-  echo "➕ Füge Benutzer '$CURRENT_USER' zur Docker-Gruppe hinzu..."
-  usermod -aG docker "$CURRENT_USER"
-else
-  echo "👤 Benutzer '$CURRENT_USER' ist bereits in Docker-Gruppe."
-fi
-
 # --- Systemweite Lösung für zukünftige Benutzer ---
 echo "🔧 Richte systemweite Lösung für zukünftige Benutzer ein..."
 
-# 1. Systemd-Service für automatische Gruppen-Zuweisung
+# 1. Systemd-Service
 echo "📋 Erstelle systemd Service für automatische Gruppen-Zuweisung..."
 tee /etc/systemd/system/auto-user-groups.service > /dev/null <<'EOF'
 [Unit]
@@ -74,11 +66,10 @@ tee /usr/local/bin/auto-add-groups > /dev/null <<'EOF'
 REQUIRED_GROUPS=("video" "render" "docker")
 
 for username in $(getent passwd | grep -E "/home/" | cut -d: -f1); do
-  # Überspringe Systembenutzer ohne Home-Verzeichnis
   if [[ "$username" == "root" || "$username" == "nobody" ]]; then
     continue
   fi
-  
+
   for grp in "${REQUIRED_GROUPS[@]}"; do
     if getent group "$grp" > /dev/null && ! id -nG "$username" | grep -qw "$grp"; then
       echo "➕ Füge Benutzer '$username' zur Gruppe '$grp' hinzu"
@@ -90,15 +81,13 @@ EOF
 
 chmod +x /usr/local/bin/auto-add-groups
 
-# 3. PAM optional → nicht automatisch gesetzt
-
-# 4. Skript für neue Benutzer (useradd → /etc/skel)
+# 3. Ergänze /etc/skel für neue Benutzer
 echo "📋 Ergänze .bashrc von neuen Benutzern..."
 if ! grep -q "auto-add-groups" /etc/skel/.bashrc 2>/dev/null; then
   echo 'if [ -x /usr/local/bin/auto-add-groups ]; then /usr/local/bin/auto-add-groups; fi' >> /etc/skel/.bashrc
 fi
 
-# --- runc installieren, falls nicht vorhanden ---
+# --- runc installieren ---
 ORIGINAL_RUNC="/usr/bin/runc"
 if ! command -v runc &>/dev/null; then
   echo "📥 runc nicht gefunden – installiere..."
@@ -111,28 +100,15 @@ if ! command -v runc &>/dev/null; then
     chmod +x "$ORIGINAL_RUNC"
     echo "✅ runc erfolgreich installiert (GitHub Binary)."
   fi
+else
+  echo "✅ runc ist bereits installiert."
 fi
 
-# --- Docker installieren, falls nicht vorhanden ---
-if ! command -v docker &>/dev/null; then
-  echo "📦 Docker nicht gefunden – installiere docker.io..."
-  apt-get update
-  apt-get install -y docker.io
-  systemctl enable --now docker
-  echo "✅ Docker erfolgreich installiert."
-fi
-
-# --- Docker Wrapper erstellen ---
+# --- Docker Wrapper vorbereiten (ohne Docker-Installation) ---
 WRAPPER="/usr/local/bin/docker"
 ORIGINAL_DOCKER="/usr/bin/docker-original"
 
-if [[ -f "/usr/bin/docker" && ! -f "$ORIGINAL_DOCKER" ]]; then
-  echo "📦 Sichere Original-Docker-Binary"
-  mv /usr/bin/docker "$ORIGINAL_DOCKER"
-  chmod +x "$ORIGINAL_DOCKER"
-fi
-
-echo "🛠️ Erstelle Docker-Wrapper"
+echo "🛠️ Erstelle Docker-Wrapper (funktioniert sobald Docker installiert ist)..."
 tee "$WRAPPER" > /dev/null <<'EOF'
 #!/bin/bash
 CMD="$1"
@@ -148,7 +124,6 @@ ADD_DRI=1
 ADD_VIDEO=1
 ADD_RENDER=1
 
-# Parse arguments
 args=("$@")
 for ((i=0; i<${#args[@]}; i++)); do
   arg="${args[i]}"
@@ -168,7 +143,7 @@ for ((i=0; i<${#args[@]}; i++)); do
       if [[ "$group_arg" == "render" || "$group_arg" == "$RENDER_GID" ]]; then
         ADD_RENDER=0
       fi
-      ((i++)) # Skip next argument
+      ((i++))
       ;;
   esac
 done
@@ -195,11 +170,10 @@ systemctl enable auto-user-groups.service
 systemctl start auto-user-groups.service
 
 echo "✅ Setup abgeschlossen!"
-
 echo ""
 echo "📋 Zukünftige Benutzer werden automatisch zu folgenden Gruppen hinzugefügt:"
 echo "   - video"
-echo "   - render" 
+echo "   - render"
 echo "   - docker"
 echo ""
 echo "⚠️  Aktuelle Gruppenänderungen werden erst nach Neustart wirksam!"
