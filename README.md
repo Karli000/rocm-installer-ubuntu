@@ -33,7 +33,7 @@ wget -O install.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubu
 Checks root/user context
 Creates groups video, render, docker if missing
 Adds current user to these groups
-Creates wrappers for tools (docker, nerdctl, podman) in /usr/local/bin
+Creates wrappers for tools (docker) in /usr/local/bin
 
 ### 🧩 Notes
 
@@ -127,7 +127,7 @@ wget -O install.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubu
 Prüft Root/User-Kontext  
 Erstellt Gruppen video, render, docker falls nicht vorhanden  
 Fügt aktuellen User zu den Gruppen hinzu  
-Erstellt Wrapper für Tools (docker, nerdctl, podman) in /usr/local/bin
+Erstellt Wrapper für Tools (docker) in /usr/local/bin
 
 ### 🧩 Hinweise
 
