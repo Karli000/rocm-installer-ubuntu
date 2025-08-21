@@ -44,7 +44,7 @@ Can be executed standalone, even without running install.sh first
 ### 📦 Download + Run
 
 ```
-wget -O amd-gpu-passthrough.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/amd-gpu-passthrough.sh && sudo chmod +x amd-gpu-passthrough.sh && sudo ./amd-gpu-passthrough.sh
+wget -O amd-gpu-passthrough.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/docker-passthrough.sh && sudo chmod +x docker-passthrough.sh && sudo ./docker-passthrough.sh
 ```
 
 ## 🛠️ HSA-Override-test.sh – Check/Set HSA_OVERRIDE
@@ -137,7 +137,7 @@ Kann allein ausgeführt werden, auch ohne vorheriges install.sh
 
 ### 📦 Download + Start  
 ```
-wget -O amd-gpu-passthrough.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/amd-gpu-passthrough.sh && sudo chmod +x amd-gpu-passthrough.sh && sudo ./amd-gpu-passthrough.sh
+wget -O amd-gpu-passthrough.sh https://raw.githubusercontent.com/Karli000/rocm-installer-ubuntu/refs/heads/main/docker-passthrough.sh && sudo chmod +x docker-passthrough.sh && sudo ./docker-passthrough.sh
 ```
 
 ## 🛠️ HSA-Override-test.sh – HSA_OVERRIDE prüfen/setzen  
