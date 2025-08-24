@@ -1,103 +1,105 @@
 #!/bin/bash
 set -e
 
-echo "🔧 Starte vollständiges Setup für GPU-Docker-Integration..."
+echo "🔧 Starte sauberes GPU-Docker-Setup ..."
 
-# --- Root-Prüfung ---
+# --- Root prüfen ---
 if [[ "$EUID" -ne 0 ]]; then
-  echo "❌ Bitte mit sudo ausführen!"
+  echo "❌ Bitte als root oder mit sudo ausführen!"
   exit 1
 fi
 
 CURRENT_USER="${SUDO_USER:-$USER}"
 echo "👤 Aktueller Benutzer: $CURRENT_USER"
 
-# --- Gruppen erstellen ---
+# --- Gruppen anlegen ---
 GROUPS=("video" "render" "docker")
 for grp in "${GROUPS[@]}"; do
-  getent group "$grp" >/dev/null || groupadd "$grp"
-  usermod -aG "$grp" "$CURRENT_USER"
+  if ! getent group "$grp" >/dev/null; then
+    echo "➕ Erstelle Gruppe '$grp'..."
+    groupadd "$grp"
+  else
+    echo "✔ Gruppe '$grp' existiert bereits."
+  fi
 done
 
-# --- Systemweite Gruppen-Zuweisung ---
+# --- Benutzer zu Gruppen hinzufügen ---
+for grp in "${GROUPS[@]}"; do
+  if ! id -nG "$CURRENT_USER" | grep -qw "$grp"; then
+    echo "➕ Füge Benutzer '$CURRENT_USER' zur Gruppe '$grp' hinzu..."
+    usermod -aG "$grp" "$CURRENT_USER"
+  fi
+done
+
+# --- Systemweite Gruppen-Zuweisung für neue Benutzer ---
 tee /usr/local/bin/auto-add-groups > /dev/null <<'EOF'
 #!/bin/bash
 REQUIRED_GROUPS=("video" "render" "docker")
 for username in $(getent passwd | grep -E "/home/" | cut -d: -f1); do
   [[ "$username" == "root" || "$username" == "nobody" ]] && continue
   for grp in "${REQUIRED_GROUPS[@]}"; do
-    getent group "$grp" >/dev/null && ! id -nG "$username" | grep -qw "$grp" && usermod -aG "$grp" "$username"
+    if getent group "$grp" > /dev/null && ! id -nG "$username" | grep -qw "$grp"; then
+      echo "➕ Füge Benutzer '$username' zur Gruppe '$grp' hinzu"
+      usermod -aG "$grp" "$username"
+    fi
   done
 done
 EOF
 chmod +x /usr/local/bin/auto-add-groups
 
-tee /etc/systemd/system/auto-user-groups.service > /dev/null <<'EOF'
-[Unit]
-Description=Auto-add users to GPU/Docker groups
-After=user@.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/auto-add-groups
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl daemon-reload
-systemctl enable auto-user-groups.service
-systemctl start auto-user-groups.service
+# Ergänze /etc/skel/.bashrc
+if ! grep -q "auto-add-groups" /etc/skel/.bashrc 2>/dev/null; then
+  echo 'if [ -x /usr/local/bin/auto-add-groups ]; then /usr/local/bin/auto-add-groups; fi' >> /etc/skel/.bashrc
+fi
 
 # --- Docker installieren ---
-echo "📦 Installiere Docker Engine..."
 apt-get update
 apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
-
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/trusted.gpg.d/docker.gpg
-echo "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
-  > /etc/apt/sources.list.d/docker.list
-
+echo "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
 apt-get update
-apt-get install -y docker-ce docker-ce-cli containerd.io
+apt-get install -y docker-ce docker-ce-cli
 
-# --- runc installieren ---
-if ! command -v runc &>/dev/null; then
+# --- runc installieren falls nötig ---
+if ! command -v runc >/dev/null 2>&1; then
   apt-get install -y runc || {
     wget -q https://github.com/opencontainers/runc/releases/download/v1.1.9/runc.amd64 -O /usr/bin/runc
     chmod +x /usr/bin/runc
   }
 fi
 
-# --- Docker-Wrapper mit automatischer Pfaderkennung ---
-WRAPPER="/usr/local/bin/docker"
+# --- Original Docker sichern ---
+if [[ ! -f /usr/bin/docker-original ]]; then
+  cp "$(command -v docker)" /usr/bin/docker-original
+fi
 
+# --- Wrapper erstellen ---
+WRAPPER="/usr/local/bin/docker"
+rm -f "$WRAPPER"
 tee "$WRAPPER" > /dev/null <<'EOF'
 #!/bin/bash
-CMD="$1"; shift
+REAL_DOCKER="/usr/bin/docker-original"
 
-ORIGINAL=$(command -v docker-original || true)
-if [[ -z "$ORIGINAL" || "$(readlink -f "$ORIGINAL")" == "$(readlink -f "$0")" ]]; then
-  ORIGINAL=$(command -v docker)
-  if [[ -z "$ORIGINAL" ]]; then
-    echo "❌ Kein Docker-Binary gefunden!"
-    exit 1
-  fi
+if [[ ! -x "$REAL_DOCKER" ]]; then
+  echo "❌ Original-Docker nicht gefunden!"
+  exit 1
 fi
 
 VIDEO_GID=$(getent group video | cut -d: -f3)
 RENDER_GID=$(getent group render | cut -d: -f3)
 
-ADD_KFD=1; ADD_DRI=1; ADD_VIDEO=1; ADD_RENDER=1
+CMD="$1"; shift
 args=("$@")
+
+ADD_KFD=1; ADD_DRI=1; ADD_VIDEO=1; ADD_RENDER=1
 
 for ((i=0; i<${#args[@]}; i++)); do
   case "${args[i]}" in
     --device=/dev/kfd*) ADD_KFD=0 ;;
     --device=/dev/dri*) ADD_DRI=0 ;;
     --group-add)
-      next=$((i+1)); group="${args[next]}"
+      next=$((i+1))
+      group="${args[next]}"
       [[ "$group" == "video" || "$group" == "$VIDEO_GID" ]] && ADD_VIDEO=0
       [[ "$group" == "render" || "$group" == "$RENDER_GID" ]] && ADD_RENDER=0
       ((i++))
@@ -111,27 +113,24 @@ if [[ "$CMD" == "run" || "$CMD" == "create" ]]; then
   [[ $ADD_DRI -eq 1 ]] && EXTRA_ARGS+=(--device=/dev/dri)
   [[ $ADD_VIDEO -eq 1 ]] && EXTRA_ARGS+=(--group-add "$VIDEO_GID")
   [[ $ADD_RENDER -eq 1 ]] && EXTRA_ARGS+=(--group-add "$RENDER_GID")
-  exec "$ORIGINAL" "$CMD" "${EXTRA_ARGS[@]}" "${args[@]}"
+  exec "$REAL_DOCKER" "$CMD" "${EXTRA_ARGS[@]}" "${args[@]}"
 else
-  exec "$ORIGINAL" "$CMD" "${args[@]}"
+  exec "$REAL_DOCKER" "$CMD" "${args[@]}"
 fi
 EOF
-
 chmod +x "$WRAPPER"
 
-DOCKER_BIN=$(command -v docker)
-if [[ -f "$DOCKER_BIN" ]]; then
-  mv "$DOCKER_BIN" "$(dirname "$DOCKER_BIN")/docker-original"
-  ln -sf "$WRAPPER" "$DOCKER_BIN"
-  echo "✅ Docker-Wrapper aktiviert!"
-else
-  echo "⚠️ Docker-Binary nicht gefunden – Wrapper nicht aktiviert."
-fi
+# --- Symlink setzen ---
+rm -f /usr/bin/docker
+ln -s "$WRAPPER" /usr/bin/docker
 
-# --- Abschluss mit intelligentem Neustart ---
-echo ""
-echo "✅ Setup erfolgreich abgeschlossen!"
-echo "📋 Benutzer '$CURRENT_USER' wurde zu den Gruppen video, render, docker hinzugefügt."
-echo "🔄 Starte automatischen Neustart in 10 Sekunden..."
-sleep 10
-reboot
+echo
+echo "✅ Docker-Wrapper installiert und aktiv!"
+
+# --- Automatischer Test der GPU-Devices ---
+echo
+echo "🔍 Teste automatisch GPU-Devices im Container..."
+docker run --rm alpine sh -c 'echo "📋 /dev/kfd:"; ls -l /dev/kfd; echo; echo "📋 /dev/dri:"; ls -l /dev/dri'
+
+echo
+echo "✅ Setup abgeschlossen und GPU-Devices geprüft!"
