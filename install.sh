@@ -44,6 +44,10 @@ try "Pakete upgrade"       sudo apt upgrade -y
 try "Pakete dist-upgrade"  sudo apt dist-upgrade -y
 try "Build-Tools"          sudo apt install -y build-essential python3-setuptools python3-wheel wget jq lsb-release gnupg
 
+# --- Interaktive Abfragen unterdrücken & Konfigurationsdateien behalten ---
+export DEBIAN_FRONTEND=noninteractive
+DPKG_OPTIONS="--force-confold"
+
 # --- ROCm Repo & Key ---
 try "ROCm Repo & GPG-Key" bash -c "
     sudo mkdir -p --mode=0755 /etc/apt/keyrings
