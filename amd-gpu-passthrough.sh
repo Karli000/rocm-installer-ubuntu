@@ -9,7 +9,12 @@ if [[ "$EUID" -ne 0 ]]; then
   exit 1
 fi
 
-CURRENT_USER="${SUDO_USER:-$USER}"
+# Aktuellen Benutzer bestimmen
+if [[ -n "$SUDO_USER" ]]; then
+  CURRENT_USER="$SUDO_USER"
+else
+  CURRENT_USER=$(logname 2>/dev/null || echo "$USER")
+fi
 echo "👤 Aktueller Benutzer: $CURRENT_USER"
 
 # --- Gruppen anlegen ---
@@ -20,14 +25,6 @@ for grp in "${GROUPS[@]}"; do
     groupadd "$grp"
   else
     echo "✔ Gruppe '$grp' existiert bereits."
-  fi
-done
-
-# --- Benutzer zu Gruppen hinzufügen ---
-for grp in "${GROUPS[@]}"; do
-  if ! id -nG "$CURRENT_USER" | grep -qw "$grp"; then
-    echo "➕ Füge Benutzer '$CURRENT_USER' zur Gruppe '$grp' hinzu..."
-    usermod -aG "$grp" "$CURRENT_USER"
   fi
 done
 
@@ -67,6 +64,14 @@ if ! command -v runc >/dev/null 2>&1; then
     chmod +x /usr/bin/runc
   }
 fi
+
+# --- Benutzer zu Gruppen hinzufügen (NACH Docker-Installation!) ---
+for grp in "${GROUPS[@]}"; do
+  if ! id -nG "$CURRENT_USER" | grep -qw "$grp"; then
+    echo "➕ Füge Benutzer '$CURRENT_USER' zur Gruppe '$grp' hinzu..."
+    usermod -aG "$grp" "$CURRENT_USER"
+  fi
+done
 
 # --- Original Docker sichern ---
 if [[ ! -f /usr/bin/docker-original ]]; then
@@ -130,7 +135,17 @@ echo "✅ Docker-Wrapper installiert und aktiv!"
 # --- Automatischer Test der GPU-Devices ---
 echo
 echo "🔍 Teste automatisch GPU-Devices im Container..."
-docker run --rm alpine sh -c 'echo "📋 /dev/kfd:"; ls -l /dev/kfd; echo; echo "📋 /dev/dri:"; ls -l /dev/dri'
+if docker info >/dev/null 2>&1; then
+  docker run --rm alpine sh -c 'echo "📋 /dev/kfd:"; ls -l /dev/kfd; echo; echo "📋 /dev/dri:"; ls -l /dev/dri'
+else
+  echo "⚠️  Docker-Test übersprungen: bitte neu einloggen oder rebooten, damit Gruppenrechte aktiv sind."
+fi
 
 echo
-echo "✅ Setup abgeschlossen und GPU-Devices geprüft!"
+echo "✅ Setup abgeschlossen!"
+
+# --- Automatischer Reboot ---
+echo
+echo "🔄 Alle Änderungen abgeschlossen. System wird jetzt neu gestartet, damit Gruppenrechte aktiv werden..."
+sleep 5
+reboot
