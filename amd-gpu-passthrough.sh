@@ -147,5 +147,5 @@ echo "✅ Setup abgeschlossen!"
 # --- Automatischer Reboot ---
 echo
 echo "🔄 Alle Änderungen abgeschlossen. System wird jetzt neu gestartet, damit Gruppenrechte aktiv werden..."
-sleep 5
+sleep 10
 reboot
