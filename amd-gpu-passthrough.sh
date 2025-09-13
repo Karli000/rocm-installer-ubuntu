@@ -45,6 +45,7 @@ if [ "$1" == "run" ]; then
     [[ -n "$RENDER_GID" && " ${args[*]} " != *" --group-add $RENDER_GID "* ]] && extra_flags+=(--group-add "$RENDER_GID")
     VIDEO_GID=$(getent group video | cut -d: -f3)
     [[ -n "$VIDEO_GID" && " ${args[*]} " != *" --group-add $VIDEO_GID "* ]] && extra_flags+=(--group-add "$VIDEO_GID")
+    [[ " ${args[*]} " != *"/opt/rocm"* ]] && extra_flags+=(-v /opt/rocm:/opt/rocm -e ROCM_PATH=/opt/rocm)
 
 
     for dev in /dev/dri/card* /dev/dri/renderD*; do
