@@ -3,20 +3,22 @@ set -e
 
 echo "🔧 Installiere systemweiten Docker-Pfad-Wrapper für AMD GPUs ..."
 
-# 1️⃣ Benutzer in Gruppen eintragen (video & render)
-for group in video render; do
+# 1️⃣ Benutzer in Gruppen eintragen (video & render & docker)
+for group in video render docker; do
     if ! getent group "$group" > /dev/null; then
         echo "ℹ️ Gruppe $group existiert nicht, erstelle..."
         sudo groupadd "$group"
     fi
-done
 
-# Alle Benutzer in Gruppen eintragen
-for user in $(cut -f1 -d: /etc/passwd); do
-    for group in video render docker; do
-        sudo usermod -aG "$group" "$user" 2>/dev/null || true
+    for user in root "$USER"; do
+        if ! id -nG "$user" | grep -qw "$group"; then
+            sudo usermod -aG "$group" "$user"
+            echo "➕ $user zur Gruppe $group hinzugefügt"
+        else
+            echo "✔️ $user ist bereits in Gruppe $group"
+        fi
     done
-done
+	
 
 # 2️⃣ Wrapper erstellen
 WRAPPER="/usr/local/bin/docker"
@@ -25,7 +27,26 @@ sudo tee "$WRAPPER" > /dev/null <<'EOF'
 #!/bin/bash
 # Systemweiter Docker-Wrapper für AMD GPUs
 
-REAL_DOCKER="/usr/bin/docker"
+REAL_DOCKER="$(command -v docker)"
+
+# Prüfen, ob der erkannte Pfad auf den Wrapper selbst zeigt
+if [[ "$REAL_DOCKER" == "$0" ]]; then
+    echo "⚠️ Docker verweist auf den Wrapper selbst – versuche echten Pfad zu finden..."
+
+    # Suche alle docker-Binaries im PATH, außer dem Wrapper
+    for candidate in $(type -a -p docker); do
+        if [[ "$candidate" != "$0" && -x "$candidate" ]]; then
+            REAL_DOCKER="$candidate"
+            break
+        fi
+    done
+
+    # Wenn keine echte Binary gefunden wurde, abbrechen
+    if [[ "$REAL_DOCKER" == "$0" ]]; then
+        echo "❌ Keine echte Docker-Binary gefunden!" >&2
+        exit 1
+    fi
+fi	
 
 if [ "$1" == "run" ]; then
     shift
@@ -36,6 +57,8 @@ if [ "$1" == "run" ]; then
     [[ " ${args[*]} " != *" --device=/dev/kfd "* ]]   && extra_flags+=(--device=/dev/kfd)
     [[ " ${args[*]} " != *" --device=/dev/dri "* ]]   && extra_flags+=(--device=/dev/dri)
     [[ " ${args[*]} " != *" --group-add video "* ]]   && extra_flags+=(--group-add video)
+    [[ " ${args[*]} " != *" --group-add render "* ]]  && extra_flags+=(--group-add render)
+
 
     for dev in /dev/dri/card* /dev/dri/renderD*; do
         [ -e "$dev" ] && [[ " ${args[*]} " != *" $dev "* ]] && extra_flags+=(--device="$dev")
@@ -50,4 +73,9 @@ EOF
 sudo chmod +x "$WRAPPER"
 
 echo "✅ Docker-Pfad-Wrapper installiert."
+
 echo "ℹ️ Jetzt greifen alle Docker-Run-Aufrufe automatisch die AMD-Flags, auch für root."
+
+echo "🔁 Starte das System neu, damit Gruppenmitgliedschaften wirksam werden..."
+sleep 5
+sudo reboot
