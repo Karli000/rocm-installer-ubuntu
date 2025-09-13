@@ -41,8 +41,11 @@ if [ "$1" == "run" ]; then
 
     [[ " ${args[*]} " != *" --device=/dev/kfd "* ]]   && extra_flags+=(--device=/dev/kfd)
     [[ " ${args[*]} " != *" --device=/dev/dri "* ]]   && extra_flags+=(--device=/dev/dri)
-    [[ " ${args[*]} " != *" --group-add video "* ]]   && extra_flags+=(--group-add video)
-    [[ " ${args[*]} " != *" --group-add render "* ]]  && extra_flags+=(--group-add render)
+    RENDER_GID=$(getent group render | cut -d: -f3)
+    [[ -n "$RENDER_GID" && " ${args[*]} " != *" --group-add $RENDER_GID "* ]] && extra_flags+=(--group-add "$RENDER_GID")
+    VIDEO_GID=$(getent group video | cut -d: -f3)
+    [[ -n "$VIDEO_GID" && " ${args[*]} " != *" --group-add $VIDEO_GID "* ]] && extra_flags+=(--group-add "$VIDEO_GID")
+
 
     for dev in /dev/dri/card* /dev/dri/renderD*; do
         [ -e "$dev" ] && [[ " ${args[*]} " != *" $dev "* ]] && extra_flags+=(--device="$dev")
