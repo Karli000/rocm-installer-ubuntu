@@ -27,31 +27,18 @@ sudo tee "$WRAPPER" > /dev/null <<'EOF'
 #!/bin/bash
 # Systemweiter Docker-Wrapper für AMD GPUs
 
-REAL_DOCKER="$(command -v docker)"
+REAL_DOCKER="$(type -a docker | awk '/is / {print $3}' | grep -v "$0" | head -n1)"
 
-# Prüfen, ob der erkannte Pfad auf den Wrapper selbst zeigt
-if [[ "$REAL_DOCKER" == "$0" ]]; then
-    echo "⚠️ Docker verweist auf den Wrapper selbst – versuche echten Pfad zu finden..."
-
-    for candidate in $(type -a docker | awk '/is / {print $3}'); do
-        if [[ "$candidate" != "$0" && -x "$candidate" ]]; then
-            REAL_DOCKER="$candidate"
-            break
-        fi
-    done
-
-    if [[ "$REAL_DOCKER" == "$0" ]]; then
-        echo "❌ Keine echte Docker-Binary gefunden!" >&2
-        exit 1
-    fi
-fi  
+if [[ -z "$REAL_DOCKER" || "$REAL_DOCKER" == "$0" ]]; then
+    echo "❌ Keine echte Docker-Binary gefunden!" >&2
+    exit 1
+fi
 
 if [ "$1" == "run" ]; then
     shift
     args=("$@")
     extra_flags=()
 
-    # Flags nur hinzufügen, wenn sie noch nicht gesetzt sind
     [[ " ${args[*]} " != *" --device=/dev/kfd "* ]]   && extra_flags+=(--device=/dev/kfd)
     [[ " ${args[*]} " != *" --device=/dev/dri "* ]]   && extra_flags+=(--device=/dev/dri)
     [[ " ${args[*]} " != *" --group-add video "* ]]   && extra_flags+=(--group-add video)
