@@ -27,10 +27,11 @@ sudo tee "$WRAPPER" > /dev/null <<'EOF'
 #!/bin/bash
 # Systemweiter Docker-Wrapper für AMD GPUs
 
-REAL_DOCKER="$(type -a docker | awk '/is / {print $3}' | grep -v "$0" | head -n1)"
+# echte Docker-Binary finden (nicht der Wrapper selbst)
+REAL_DOCKER="$(command -v docker | grep -v /usr/local/bin/docker)"
 
-if [[ -z "$REAL_DOCKER" || "$REAL_DOCKER" == "$0" ]]; then
-    echo "❌ Keine echte Docker-Binary gefunden!" >&2
+if [[ -z "$REAL_DOCKER" || ! -x "$REAL_DOCKER" ]]; then
+    echo "❌ Konnte echte Docker-Binary nicht finden!" >&2
     exit 1
 fi
 
@@ -39,21 +40,18 @@ if [ "$1" == "run" ]; then
     args=("$@")
     extra_flags=()
 
+    # Geräte mounten
     [[ " ${args[*]} " != *" --device=/dev/kfd "* ]] && extra_flags+=(--device=/dev/kfd)
     [[ " ${args[*]} " != *" --device=/dev/dri "* ]] && extra_flags+=(--device=/dev/dri)
 
+    # Gruppen hinzufügen
     RENDER_GID=$(getent group render | cut -d: -f3)
-    RENDER_NAME="render"
-    if [[ -n "$RENDER_GID" && " ${args[*]} " != *"--group-add $RENDER_GID"* && " ${args[*]} " != *"--group-add $RENDER_NAME"* ]]; then
-    extra_flags+=(--group-add "$RENDER_GID")
-    fi
+    [[ -n "$RENDER_GID" && " ${args[*]} " != *"--group-add $RENDER_GID"* ]] && extra_flags+=(--group-add "$RENDER_GID")
 
     VIDEO_GID=$(getent group video | cut -d: -f3)
-    VIDEO_NAME="video"
-    if [[ -n "$VIDEO_GID" && " ${args[*]} " != *"--group-add $VIDEO_GID"* && " ${args[*]} " != *"--group-add $VIDEO_NAME"* ]]; then
-    extra_flags+=(--group-add "$VIDEO_GID")
-    fi
+    [[ -n "$VIDEO_GID" && " ${args[*]} " != *"--group-add $VIDEO_GID"* ]] && extra_flags+=(--group-add "$VIDEO_GID")
 
+    # alle GPU-Geräte anhängen
     for dev in /dev/dri/card* /dev/dri/renderD*; do
         [ -e "$dev" ] && [[ " ${args[*]} " != *" $dev "* ]] && extra_flags+=(--device="$dev")
     done
