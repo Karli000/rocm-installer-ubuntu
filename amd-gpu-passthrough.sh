@@ -39,13 +39,23 @@ if [ "$1" == "run" ]; then
     args=("$@")
     extra_flags=()
 
-    [[ " ${args[*]} " != *" --device=/dev/kfd "* ]]   && extra_flags+=(--device=/dev/kfd)
-    [[ " ${args[*]} " != *" --device=/dev/dri "* ]]   && extra_flags+=(--device=/dev/dri)
+    [[ " ${args[*]} " != *" --device=/dev/kfd "* ]] && extra_flags+=(--device=/dev/kfd)
+    [[ " ${args[*]} " != *" --device=/dev/dri "* ]] && extra_flags+=(--device=/dev/dri)
+
     RENDER_GID=$(getent group render | cut -d: -f3)
-    [[ -n "$RENDER_GID" && " ${args[*]} " != *" --group-add $RENDER_GID "* ]] && extra_flags+=(--group-add "$RENDER_GID")
+    RENDER_NAME="render"
+    if [[ -n "$RENDER_GID" && " ${args[*]} " != *"--group-add $RENDER_GID"* && " ${args[*]} " != *"--group-add $RENDER_NAME"* ]]; then
+    extra_flags+=(--group-add "$RENDER_GID")
+    fi
+
     VIDEO_GID=$(getent group video | cut -d: -f3)
-    [[ -n "$VIDEO_GID" && " ${args[*]} " != *" --group-add $VIDEO_GID "* ]] && extra_flags+=(--group-add "$VIDEO_GID")
+    VIDEO_NAME="video"
+    if [[ -n "$VIDEO_GID" && " ${args[*]} " != *"--group-add $VIDEO_GID"* && " ${args[*]} " != *"--group-add $VIDEO_NAME"* ]]; then
+    extra_flags+=(--group-add "$VIDEO_GID")
+    fi
+
     [[ " ${args[*]} " != *"/opt/rocm"* ]] && extra_flags+=(-v /opt/rocm:/opt/rocm -e ROCM_PATH=/opt/rocm)
+
 
 
     for dev in /dev/dri/card* /dev/dri/renderD*; do
