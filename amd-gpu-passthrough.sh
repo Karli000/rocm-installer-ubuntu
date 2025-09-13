@@ -54,10 +54,6 @@ if [ "$1" == "run" ]; then
     extra_flags+=(--group-add "$VIDEO_GID")
     fi
 
-    [[ " ${args[*]} " != *"/opt/rocm"* ]] && extra_flags+=(-v /opt/rocm:/opt/rocm -e ROCM_PATH=/opt/rocm)
-
-
-
     for dev in /dev/dri/card* /dev/dri/renderD*; do
         [ -e "$dev" ] && [[ " ${args[*]} " != *" $dev "* ]] && extra_flags+=(--device="$dev")
     done
