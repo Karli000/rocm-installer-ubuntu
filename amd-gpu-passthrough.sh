@@ -18,7 +18,7 @@ for group in video render docker; do
             echo "✔️ $user ist bereits in Gruppe $group"
         fi
     done
-	
+done	
 
 # 2️⃣ Wrapper erstellen
 WRAPPER="/usr/local/bin/docker"
