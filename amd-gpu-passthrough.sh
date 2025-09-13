@@ -34,7 +34,7 @@ if [[ "$REAL_DOCKER" == "$0" ]]; then
     echo "⚠️ Docker verweist auf den Wrapper selbst – versuche echten Pfad zu finden..."
 
     # Suche alle docker-Binaries im PATH, außer dem Wrapper
-    for candidate in $(type -a -p docker); do
+    for candidate in $(command -a -p docker); do
         if [[ "$candidate" != "$0" && -x "$candidate" ]]; then
             REAL_DOCKER="$candidate"
             break
